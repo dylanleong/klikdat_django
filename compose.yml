@@ -1,0 +1,68 @@
+services:
+ db:
+   image: postgres:17
+   environment:
+     POSTGRES_DB: ${DATABASE_NAME}
+     POSTGRES_USER: ${DATABASE_USERNAME}
+     POSTGRES_PASSWORD: ${DATABASE_PASSWORD}
+   ports:
+     - "5432:5432"
+   volumes:
+     - ../klikdat_db:/var/lib/postgresql/data
+   env_file:
+     - .env
+
+ redis:
+    image: redis:7
+    ports:
+      - "6379:6379"
+
+
+ django-web:
+   build: .
+   container_name: django-docker
+#   user: 1000:1000
+   environment:
+     - DJANGO_DEBUG
+   ports:
+     - "8000:8000"
+
+   command: >
+      ./entrypoint.sh
+   env_file:
+     - .env
+   # Storage volumes
+   volumes:
+     - static_volume:/app/staticfiles
+     - media_volume:/app/mediafiles
+     - .:/app
+     
+   # Exposing port 8000
+   expose: 
+   - 8000
+ #  restart: "on-failure"
+
+
+ # Nginx server
+ nginx:
+
+   # Build context
+   build: ./nginx
+
+   # Mapping machine and container ports
+   ports:
+     - 1337:80
+     
+   # Storage volumes
+   volumes:
+     - static_volume:/app/staticfiles
+     - media_volume:/app/mediafiles
+   depends_on:
+     - django-web
+#   restart: "on-failure"
+
+
+volumes:
+ static_volume:
+ media_volume:
+

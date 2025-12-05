@@ -1,0 +1,15 @@
+{
+    "name": "KLIKDAT Django Dev Container",
+    "dockerComposeFile": "../compose.yml",
+    "service": "django-web",
+    "workspaceFolder": "/app",
+    "forwardPorts": [8000],
+    "customizations": {
+        "vscode": {
+            "extensions": [
+                "ms-python.python",
+                "ms-python.vscode-pylance"
+            ]
+        }
+    }
+}

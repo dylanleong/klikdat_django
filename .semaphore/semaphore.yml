@@ -1,0 +1,17 @@
+version: v1.0
+name: Django CI
+agent:
+  machine:
+    type: e1-standard-2
+    os_image: ubuntu2004
+
+blocks:
+  - name: "Test"
+    task:
+      jobs:
+        - name: "Run Tests"
+          commands:
+            - checkout
+            - sem-version python 3.9
+            - pip install -r requirements.txt
+            - python manage.py test

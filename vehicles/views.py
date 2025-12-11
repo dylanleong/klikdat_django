@@ -5,21 +5,22 @@ from rest_framework.permissions import IsAuthenticatedOrReadOnly, IsAuthenticate
 from rest_framework.pagination import PageNumberPagination
 from django.db.models import Q
 from .models import (
-    VehicleType, Make, Model, Gearbox, BodyType,
-    Color, FuelType, SellerType, Vehicle, VehicleImage, Favorite
+    VehicleType, Make, Model,
+    SellerType, Vehicle, VehicleImage, Favorite, VehicleProfile
 )
+from .models_attributes import VehicleAttribute
 from .serializers import (
     VehicleTypeSerializer, MakeSerializer, ModelSerializer,
-    GearboxSerializer, BodyTypeSerializer, ColorSerializer,
-    FuelTypeSerializer, SellerTypeSerializer, VehicleSerializer,
-    VehicleImageSerializer, FavoriteSerializer
+    SellerTypeSerializer, VehicleSerializer,
+    VehicleImageSerializer, FavoriteSerializer, VehicleAttributeSerializer,
+    VehicleProfileSerializer
 )
 
 
 class StandardResultsSetPagination(PageNumberPagination):
     page_size = 20
     page_size_query_param = 'page_size'
-    max_page_size = 100
+    max_page_size = 1000
 
 
 class VehicleTypeViewSet(viewsets.ModelViewSet):
@@ -33,13 +34,23 @@ class MakeViewSet(viewsets.ModelViewSet):
     """ViewSet for vehicle manufacturers"""
     queryset = Make.objects.all()
     serializer_class = MakeSerializer
+    pagination_class = StandardResultsSetPagination
     permission_classes = [IsAuthenticatedOrReadOnly]
+    
+    def get_queryset(self):
+        queryset = super().get_queryset()
+        # Allow filtering by vehicle_type
+        vehicle_type_id = self.request.query_params.get('vehicle_type', None)
+        if vehicle_type_id is not None:
+            queryset = queryset.filter(vehicle_types=vehicle_type_id)
+        return queryset
 
 
 class ModelViewSet(viewsets.ModelViewSet):
     """ViewSet for vehicle models"""
     queryset = Model.objects.select_related('make').all()
     serializer_class = ModelSerializer
+    pagination_class = StandardResultsSetPagination
     permission_classes = [IsAuthenticatedOrReadOnly]
     
     def get_queryset(self):
@@ -48,35 +59,15 @@ class ModelViewSet(viewsets.ModelViewSet):
         make_id = self.request.query_params.get('make', None)
         if make_id is not None:
             queryset = queryset.filter(make_id=make_id)
+            
+        # Allow filtering by vehicle_type
+        vehicle_type_id = self.request.query_params.get('vehicle_type', None)
+        if vehicle_type_id is not None:
+            queryset = queryset.filter(vehicle_type_id=vehicle_type_id)
+            
+        return queryset
         return queryset
 
-
-class GearboxViewSet(viewsets.ModelViewSet):
-    """ViewSet for gearbox types"""
-    queryset = Gearbox.objects.all()
-    serializer_class = GearboxSerializer
-    permission_classes = [IsAuthenticatedOrReadOnly]
-
-
-class BodyTypeViewSet(viewsets.ModelViewSet):
-    """ViewSet for body types"""
-    queryset = BodyType.objects.all()
-    serializer_class = BodyTypeSerializer
-    permission_classes = [IsAuthenticatedOrReadOnly]
-
-
-class ColorViewSet(viewsets.ModelViewSet):
-    """ViewSet for colors"""
-    queryset = Color.objects.all()
-    serializer_class = ColorSerializer
-    permission_classes = [IsAuthenticatedOrReadOnly]
-
-
-class FuelTypeViewSet(viewsets.ModelViewSet):
-    """ViewSet for fuel types"""
-    queryset = FuelType.objects.all()
-    serializer_class = FuelTypeSerializer
-    permission_classes = [IsAuthenticatedOrReadOnly]
 
 
 class SellerTypeViewSet(viewsets.ModelViewSet):
@@ -86,14 +77,45 @@ class SellerTypeViewSet(viewsets.ModelViewSet):
     permission_classes = [IsAuthenticatedOrReadOnly]
 
 
+class VehicleProfileViewSet(viewsets.ModelViewSet):
+    """ViewSet for user vehicle profiles"""
+    serializer_class = VehicleProfileSerializer
+    permission_classes = [IsAuthenticated]
+    
+    def get_queryset(self):
+        # User can only see their own profile
+        return VehicleProfile.objects.filter(user=self.request.user)
+    
+    def perform_create(self, serializer):
+        serializer.save(user=self.request.user)
+
+
+class VehicleAttributeViewSet(viewsets.ReadOnlyModelViewSet):
+    """
+    ViewSet for retrieving dynamic vehicle attributes.
+    Filterable by vehicle_type (ID).
+    Example: /api/attributes/?vehicle_type=1
+    """
+    queryset = VehicleAttribute.objects.prefetch_related('options').all()
+    serializer_class = VehicleAttributeSerializer
+    permission_classes = [IsAuthenticatedOrReadOnly]
+    
+    def get_queryset(self):
+        queryset = super().get_queryset()
+        vehicle_type_id = self.request.query_params.get('vehicle_type', None)
+        if vehicle_type_id:
+            queryset = queryset.filter(vehicle_types__id=vehicle_type_id)
+        return queryset
+
+
 class VehicleViewSet(viewsets.ModelViewSet):
     """ViewSet for vehicle listings"""
     queryset = Vehicle.objects.select_related(
-        'owner', 'vehicle_type', 'make', 'model', 'gearbox',
-        'body_type', 'color', 'fuel_type', 'seller_type'
+        'owner', 'vehicle_type', 'make', 'model', 'seller_type'
     ).prefetch_related('images').all()
     serializer_class = VehicleSerializer
     permission_classes = [IsAuthenticatedOrReadOnly]
+    
     pagination_class = StandardResultsSetPagination
     filter_backends = [filters.SearchFilter]
     search_fields = ['make__name', 'model__name', 'location', 'year']
@@ -144,8 +166,133 @@ class VehicleViewSet(viewsets.ModelViewSet):
         location = self.request.query_params.get('location', None)
         if location is not None:
             queryset = queryset.filter(location__icontains=location)
+
+        # Dynamic Attribute Filtering
+        # Iterate over all registered attributes and check if they are in query params
+        # This assumes attributes are relatively stable. For high performace, cache definitions.
+        # Note: This allows filtering by ANY attribute defined in the system.
+        
+        # We need to filter for specifications__{slug} = value
+        # But we only want to do this for valid attributes to avoid conflict with other params
+        # A simple approach is to iterate request.query_params
+        
+        reserved_params = {
+            'page', 'limit', 'ordering', 'search', 
+            'owner', 'vehicle_type', 'make', 
+            'min_price', 'max_price', 
+            'min_year', 'max_year', 
+            'min_mileage', 'max_mileage',
+            'location'
+        }
+        
+        for key, value in self.request.query_params.items():
+            if key not in reserved_params and value:
+                # Assume it's a dynamic attribute (or ignore if not found? existing behavior was safe)
+                # To be safe, we could check if VehicleAttribute exists with this slug,
+                # but that adds a DB query per request.
+                # Let's try to filter on specifications directly.
+                # Django JSONField filtering: specifications__color="red"
+                kwargs = {f"specifications__{key}": value}
+                try:
+                    queryset = queryset.filter(**kwargs)
+                except Exception:
+                    # Ignore invalid filters that might crash JSON lookup (unlikely with this syntax)
+                    pass
         
         return queryset
+
+    def list(self, request, *args, **kwargs):
+        queryset = self.filter_queryset(self.get_queryset())
+
+        page = self.paginate_queryset(queryset)
+        if page is not None:
+            serializer = self.get_serializer(page, many=True)
+            response = self.get_paginated_response(serializer.data)
+        else:
+            serializer = self.get_serializer(queryset, many=True)
+            response = Response(serializer.data)
+
+        # Calculate Facets
+        # We calculate facets on the *filtered* queryset (to show available options within current filter)
+        # OR on the *unfiltered* (or partially filtered) queryset depending on UX requirements.
+        # usually "faceted search" means showing counts for specific filters based on current constraints.
+        
+        # However, to prevent "narrowing to zero" where you can't unselect or select siblings,
+        # typically you want counts for a dimension *excluding* the filter on that dimension.
+        # But for simplicity in this MVP, we will calculate counts on the currently filtered queryset
+        # which effectively shows "what's left". 
+        
+        # NOTE: If the user filters by Make=Toyota, the Make facet will only show Toyota (count=N).
+        # This is expected behavior for a simple "Drill down". 
+        # For "Multi-select" usually you want counts over the whole set.
+        # Let's stick to the filtered set for now as it's efficient and standard for basic drill-down.
+        
+        from django.db.models import Count
+        
+        facets = {}
+        
+        # 1. Standard Fields
+        # Make
+        facets['makes'] = queryset.values('make__id', 'make__make').annotate(count=Count('id')).order_by('-count')
+        # Models
+        facets['models'] = queryset.values('model__id', 'model__model').annotate(count=Count('id')).order_by('-count')
+        # Vehicle Type
+        facets['vehicle_types'] = queryset.values('vehicle_type__id', 'vehicle_type__vehicle_type').annotate(count=Count('id')).order_by('-count')
+        # Seller Type
+        facets['seller_types'] = queryset.values('seller_type__id', 'seller_type__seller_type').annotate(count=Count('id')).order_by('-count')
+        # Year
+        facets['years'] = queryset.values('year').annotate(count=Count('id')).order_by('-year')
+        
+        # 2. Dynamic Attributes (from specifications)
+        # We need to filter which attributes to facet on. 
+        # Ideally, only facet on attributes relevant to the current vehicle_type (if selected) or top-level ones.
+        # For now, let's grab all defined VehicleAttributes and try to aggregate.
+        # Warning: iterating all definitions might be slow if there are hundreds.
+        
+        attributes = VehicleAttribute.objects.all()
+        # If vehicle_type is filtered, we could restrict attributes to just those 
+        # (but cross-type search might be interesting).
+        
+        dynamic_facets = {}
+        for attr in attributes:
+            # We aggregate on specifications__{slug}
+            # Note: values() on JSON field path works in Postgres and recent SQLite
+            key = f"specifications__{attr.slug}"
+            
+            # We only want values that are not null/None. 
+            # Note: We can't easily filter out "null" keys in JSON unless we do strict filtering.
+            # But the annotate should handle grouping by unique values found.
+            
+            try:
+                counts = queryset.values(key).annotate(count=Count('id')).order_by('-count')
+                
+                # Transform to cleaner format: [{"value": "Red", "count": 5}, ...]
+                facet_values = []
+                for item in counts:
+                    val = item.get(key)
+                    if val is not None:
+                        facet_values.append({'value': val, 'count': item['count']})
+                
+                if facet_values:
+                    dynamic_facets[attr.slug] = facet_values
+            except Exception:
+                # Fallback if DB doesn't support this specific JSON Op or empty result issues
+                pass
+                
+        facets['specifications'] = dynamic_facets
+        
+        # Inject validation into response
+        # Check if response.data is a dict (Pagination) or list (No Pagination)
+        if isinstance(response.data, dict):
+             response.data['facets'] = facets
+        else:
+             # Wrap list in object
+             response.data = {
+                 'results': response.data,
+                 'facets': facets
+             }
+
+        return response
     
     def perform_create(self, serializer):
         # Automatically set the owner to the current user

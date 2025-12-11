@@ -1,0 +1,12 @@
+services:
+  django-web:
+    restart: always
+    command: >
+      daphne -b 0.0.0.0 -p 8000 klikdat_django.asgi:application
+    # In production, we don't bind mount the code, we rely on the built image
+
+  db:
+    restart: always
+  
+  redis:
+    restart: always

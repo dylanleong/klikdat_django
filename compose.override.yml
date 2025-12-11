@@ -1,0 +1,8 @@
+services:
+  django-web:
+    command: >
+      ./entrypoint.sh
+    environment:
+      - DJANGO_DEBUG=True
+    volumes:
+      - .:/app

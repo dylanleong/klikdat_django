@@ -1,7 +1,14 @@
 
-from django.db.models.signals import post_save
+from django.db.models.signals import post_delete, post_save
 from django.dispatch import receiver
-from .models import Vehicle, VehicleProfile, SellerType
+from .models import Vehicle, VehicleProfile, SellerType, VehicleImage
+import os
+
+@receiver(post_delete, sender=VehicleImage)
+def cleanup_vehicle_image_file(sender, instance, **kwargs):
+    if instance.image:
+        if os.path.isfile(instance.image.path):
+            os.remove(instance.image.path)
 
 @receiver(post_save, sender=Vehicle)
 def ensure_vehicle_profile_and_seller_type(sender, instance, created, **kwargs):

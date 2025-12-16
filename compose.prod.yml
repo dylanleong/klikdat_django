@@ -3,10 +3,14 @@ services:
     restart: always
     command: >
       daphne -b 0.0.0.0 -p 8000 klikdat_django.asgi:application
-    # In production, we don't bind mount the code, we rely on the built image
+    volumes:
+      - media_volume:/app/mediafiles
 
   db:
     restart: always
-  
+
   redis:
     restart: always
+
+volumes:
+  media_volume:

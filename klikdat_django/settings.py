@@ -57,6 +57,7 @@ INSTALLED_APPS = [
     'chat',
     'vehicles',
     'users',
+    'geo',
     'locations',
     'import_export',
 ]

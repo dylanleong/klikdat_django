@@ -80,10 +80,10 @@ class Vehicle(models.Model):
     # Basic information
     title = models.CharField(max_length=200, null=True, blank=True, help_text="Short title/headline for the listing")
     description = models.TextField(null=True, blank=True, help_text="Detailed description of the vehicle")
-    price = models.DecimalField(max_digits=10, decimal_places=2)
-    year = models.IntegerField()
-    mileage = models.IntegerField(help_text="Mileage in kilometers")
-    location = models.CharField(max_length=200)
+    price = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
+    year = models.IntegerField(null=True, blank=True)
+    mileage = models.IntegerField(help_text="Mileage in kilometers", null=True, blank=True)
+    location = models.CharField(max_length=200, null=True, blank=True)
     
     # Dynamic specifications
     specifications = models.JSONField(default=dict, blank=True)

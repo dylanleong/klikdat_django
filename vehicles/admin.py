@@ -7,14 +7,15 @@ from .models_attributes import VehicleAttribute, VehicleAttributeOption
 from import_export.admin import ImportExportModelAdmin
 from .resources import (
     VehicleAttributeResource, VehicleAttributeOptionResource,
-    MakeResource, ModelResource
+    MakeResource, ModelResource, VehicleTypeResource, SellerTypeResource
 )
 
 
 @admin.register(VehicleType)
-class VehicleTypeAdmin(admin.ModelAdmin):
+class VehicleTypeAdmin(ImportExportModelAdmin):
     list_display = ['id', 'vehicle_type']
     search_fields = ['vehicle_type']
+    resource_class = VehicleTypeResource
 
 
 class VehicleAttributeOptionInline(admin.TabularInline):
@@ -62,9 +63,10 @@ class ModelAdmin(ImportExportModelAdmin):
 
 
 @admin.register(SellerType)
-class SellerTypeAdmin(admin.ModelAdmin):
+class SellerTypeAdmin(ImportExportModelAdmin):
     list_display = ['id', 'seller_type']
     search_fields = ['seller_type']
+    resource_class = SellerTypeResource
 
 
 @admin.register(VehicleProfile)

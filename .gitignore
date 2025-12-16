@@ -24,3 +24,6 @@ mediafiles/
 # OS
 .DS_Store
 Thumbs.db
+
+# geo
+geo/map_data/

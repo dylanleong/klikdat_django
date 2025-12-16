@@ -1,6 +1,6 @@
 from import_export import resources, fields, widgets
 from import_export.widgets import ForeignKeyWidget, ManyToManyWidget
-from .models import VehicleType, Make, Model
+from .models import VehicleType, Make, Model, SellerType
 from .models_attributes import VehicleAttribute, VehicleAttributeOption
 
 class VehicleAttributeResource(resources.ModelResource):
@@ -69,3 +69,20 @@ class ModelResource(resources.ModelResource):
         fields = ('id', 'model', 'make', 'vehicle_type')
         export_order = ('id', 'make', 'model', 'vehicle_type')
         import_id_fields = ('id',)
+
+
+class VehicleTypeResource(resources.ModelResource):
+    class Meta:
+        model = VehicleType
+        fields = ('id', 'vehicle_type', 'schema')
+        export_order = ('id', 'vehicle_type', 'schema')
+        import_id_fields = ('vehicle_type',)
+
+
+class SellerTypeResource(resources.ModelResource):
+    class Meta:
+        model = SellerType
+        fields = ('id', 'seller_type')
+        export_order = ('id', 'seller_type')
+        import_id_fields = ('seller_type',)
+

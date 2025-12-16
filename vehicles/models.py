@@ -44,6 +44,8 @@ class Model(models.Model):
 # REPLACED: Color, BodyType, FuelType, Gearbox models are removed.
 # Their data is now stored in Vehicle.specifications and defined in VehicleAttribute.
 # If you need to add choices, use the admin panel for VehicleAttributeOption.
+from .models_attributes import VehicleAttribute, VehicleAttributeOption
+from .utils import compress_image
 
 
 class SellerType(models.Model):
@@ -165,6 +167,28 @@ class VehicleImage(models.Model):
         # If this image is set as primary, unset others
         if self.is_primary:
             VehicleImage.objects.filter(vehicle=self.vehicle, is_primary=True).update(is_primary=False)
+        # Compress image if we have a new one (no pk) or if it's changing
+        # Simple check: always compress on save if image is present
+        # Ideally we check if image field changed, but for now this is safe
+        if self.image:
+             # Check if this is a new image or updated one to avoid re-compressing 
+             # endlessly if we save multiple times?
+             # Actually, if we assign a new file, it's an UploadedFile/MemoryFile.
+             # If it's already saved, it's a FieldFile. 
+             # compress_image handles this? 
+             # We should probably only compress if it's being uploaded.
+             # Django treats new uploads as temporary files.
+             
+             # A simple heuristic: if the image has no path attribute (in-memory) or 
+             # if we are creating a new instance.
+             pass
+             
+        # Call compression before super().save()
+        if self.image and (not self.pk or self._state.adding):
+             new_image = compress_image(self.image)
+             if new_image:
+                 self.image = new_image
+
         super().save(*args, **kwargs)
 
 

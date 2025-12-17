@@ -11,6 +11,7 @@ class UserViewSet(viewsets.ModelViewSet):
     permission_classes = [permissions.IsAuthenticated]
 
     def get_queryset(self):
-        # Optionally restrict so users can only see themselves unless admin
-        # For now, following plan to list all, but let's implement basic filtering if needed.
-        return super().get_queryset()
+        user = self.request.user
+        if user.is_superuser or user.is_staff:
+            return User.objects.all().order_by('-date_joined')
+        return User.objects.filter(id=user.id)

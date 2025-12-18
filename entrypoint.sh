@@ -33,8 +33,12 @@ print("Database connection failed after {} retries".format(max_retries))
 sys.exit(1)
 END
 
-echo "Running migrations..."
-python manage.py makemigrations
+if [ "$DJANGO_DEBUG" = "True" ]; then
+    echo "Running makemigrations..."
+    python manage.py makemigrations
+fi
+
+echo "Running migrate..."
 python manage.py migrate
 
 echo "Collecting static files..."

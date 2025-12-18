@@ -21,7 +21,7 @@ class Command(BaseCommand):
     def handle(self, *args, **options):
         url = "https://www.ip2location.com/downloads/ip2location-iso3166-2.zip"
         
-        import_dir = os.path.join(settings.MEDIA_ROOT, 'import', 'geo')
+        import_dir = os.path.join(settings.DATA_IMPORT_ROOT, 'geo')
         os.makedirs(import_dir, exist_ok=True)
         file_path = os.path.join(import_dir, 'ip2location-iso3166-2.zip')
 

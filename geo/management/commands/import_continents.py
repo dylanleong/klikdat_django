@@ -20,7 +20,7 @@ class Command(BaseCommand):
     def handle(self, *args, **options):
         url = "https://www.ip2location.com/download?token=kcCOO7Z4tSi23TwZrUf5iijv7Czaj7uIQ35u74zu1ZGECBqfXqVOb0tWLi9kixVx&file=CON-MUL"
         
-        import_dir = os.path.join(settings.MEDIA_ROOT, 'import', 'geo')
+        import_dir = os.path.join(settings.DATA_IMPORT_ROOT, 'geo')
         os.makedirs(import_dir, exist_ok=True)
         file_path = os.path.join(import_dir, 'continent-multilingual.zip')
 

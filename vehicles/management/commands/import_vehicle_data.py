@@ -17,7 +17,7 @@ class Command(BaseCommand):
         )
 
     def handle(self, *args, **options):
-        import_dir = os.path.join(settings.MEDIA_ROOT, 'import', 'vehicles')
+        import_dir = os.path.join(settings.DATA_IMPORT_ROOT, 'vehicles')
         
         if not os.path.exists(import_dir):
             self.stdout.write(self.style.ERROR(f'Import directory not found: {import_dir}'))

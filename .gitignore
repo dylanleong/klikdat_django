@@ -20,6 +20,13 @@ mediafiles/
 # IDE
 .vscode/
 .idea/
+# Data imports
+/data/
+*.csv
+*.tsv
+*.gz
+*.zip
+*.gpkg
 
 # OS
 .DS_Store

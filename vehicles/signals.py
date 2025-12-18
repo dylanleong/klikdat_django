@@ -8,7 +8,12 @@ import os
 def cleanup_vehicle_image_file(sender, instance, **kwargs):
     if instance.image:
         if os.path.isfile(instance.image.path):
-            os.remove(instance.image.path)
+            try:
+                os.remove(instance.image.path)
+            except (PermissionError, OSError):
+                # Script might not have permissions (e.g. running outside Docker)
+                # or file might be locked. We skip to avoid crashing the whole process.
+                pass
 
 @receiver(post_save, sender=Vehicle)
 def ensure_vehicle_profile_and_seller_type(sender, instance, created, **kwargs):

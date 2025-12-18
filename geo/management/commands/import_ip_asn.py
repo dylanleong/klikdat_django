@@ -20,7 +20,7 @@ class Command(BaseCommand):
     def handle(self, *args, **options):
         url = "https://iptoasn.com/data/ip2asn-v4.tsv.gz"
         
-        import_dir = os.path.join(settings.MEDIA_ROOT, 'import', 'geo')
+        import_dir = os.path.join(settings.DATA_IMPORT_ROOT, 'geo')
         os.makedirs(import_dir, exist_ok=True)
         
         filename = os.path.join(import_dir, "ip2asn-v4.tsv.gz")

@@ -10,13 +10,24 @@ For the full list of settings and their values, see
 https://docs.djangoproject.com/en/5.2/ref/settings/
 """
 
-import os 
+import os
 import json
 from datetime import timedelta
 from pathlib import Path
+from dotenv import load_dotenv
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
+
+# Load environment variables
+# In production (Docker), variables are already set.
+# In local development, we load .env.dev if no DJANGO_DEBUG is set.
+if not os.getenv('DJANGO_DEBUG'):
+    env_path = BASE_DIR / '.env.dev'
+    if env_path.exists():
+        load_dotenv(env_path)
+    else:
+        load_dotenv() # Fallback to standard .env
 
 
 # Quick-start development settings - unsuitable for production
@@ -107,21 +118,36 @@ CHANNEL_LAYERS = {
 # Database
 # https://docs.djangoproject.com/en/5.2/ref/settings/#databases
 
+DATABASE_ENGINE = os.getenv('DATABASE_ENGINE', 'sqlite3')
+DATABASE_HOST = os.getenv('DATABASE_HOST', '127.0.0.1')
+
+# If we are running locally (outside Docker) but DATABASE_HOST is set to 'db',
+# we should try to connect to localhost instead.
+if DATABASE_HOST == 'db':
+    import socket
+    try:
+        # Check if 'db' is resolvable (it only is inside the Docker network)
+        socket.gethostbyname('db')
+    except socket.gaierror:
+        # If not, we are likely running on the host, so use localhost
+        DATABASE_HOST = 'localhost'
+
 DATABASES = {
      'default': {
-         'ENGINE': 'django.db.backends.{}'.format(
-             os.getenv('DATABASE_ENGINE', 'sqlite3')
-         ),
+         'ENGINE': 'django.db.backends.{}'.format(DATABASE_ENGINE),
          'NAME': os.getenv('DATABASE_NAME', 'polls'),
          'USER': os.getenv('DATABASE_USERNAME', 'myprojectuser'),
          'PASSWORD': os.getenv('DATABASE_PASSWORD', 'password'),
-         'HOST': os.getenv('DATABASE_HOST', '127.0.0.1'),
+         'HOST': DATABASE_HOST,
          'PORT': os.getenv('DATABASE_PORT', 5432),
          'OPTIONS': json.loads(
              os.getenv('DATABASE_OPTIONS', '{}')
          ),
      }
  }
+
+# Data Import settings
+DATA_IMPORT_ROOT = BASE_DIR / 'data'
 
 
 # Password validation

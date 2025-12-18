@@ -25,7 +25,7 @@ class Command(BaseCommand):
             "https://datacatalogfiles.worldbank.org/ddh-published/0038272/5/DR0095369/World Bank Official Boundaries (GeoJSON)/World Bank Official Boundaries - Admin 2.geojson"
         ]
         
-        import_dir = os.path.join(settings.MEDIA_ROOT, 'import', 'geo')
+        import_dir = os.path.join(settings.DATA_IMPORT_ROOT, 'geo')
         os.makedirs(import_dir, exist_ok=True)
         
         for url in urls:

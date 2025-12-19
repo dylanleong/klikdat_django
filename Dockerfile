@@ -10,6 +10,13 @@ WORKDIR /app
 COPY requirements.txt .
 
 # INSTALL DEPENDENCIES
+RUN apt-get update && apt-get install -y \
+    binutils \
+    libproj-dev \
+    gdal-bin \
+    libgdal-dev \
+    && rm -rf /var/lib/apt/lists/*
+
 RUN pip install -r requirements.txt
 
 # COPY PROJECT

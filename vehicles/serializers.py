@@ -13,24 +13,7 @@ class VehicleImageSerializer(serializers.ModelSerializer):
         fields = ['id', 'image', 'is_primary', 'created_at']
 
 
-class SavedVehicleSerializer(serializers.ModelSerializer):
-    vehicle_details = serializers.SerializerMethodField()
-    
-    class Meta:
-        model = SavedVehicle
-        fields = ['id', 'vehicle', 'vehicle_details', 'created_at']
-        read_only_fields = ['created_at']
-        
-    def get_vehicle_details(self, obj):
-        # Return basic vehicle info for display
-        return {
-            'id': obj.vehicle.id,
-            'year': obj.vehicle.year,
-            'make': obj.vehicle.make.make,
-            'model': obj.vehicle.model.model,
-            'price': obj.vehicle.price,
-            'image': obj.vehicle.images.filter(is_primary=True).first().image.url if obj.vehicle.images.filter(is_primary=True).exists() else None
-        }
+
 
 
 class VehicleAttributeOptionSerializer(serializers.ModelSerializer):
@@ -205,4 +188,10 @@ class SellerReviewSerializer(serializers.ModelSerializer):
         model = SellerReview
         fields = ['id', 'seller', 'reviewer', 'reviewer_username', 'rating', 'comment', 'created_at']
         read_only_fields = ['reviewer', 'created_at']
-
+class SavedVehicleSerializer(serializers.ModelSerializer):
+    vehicle_details = VehicleSerializer(source='vehicle', read_only=True)
+    
+    class Meta:
+        model = SavedVehicle
+        fields = ['id', 'vehicle', 'vehicle_details', 'created_at']
+        read_only_fields = ['created_at']

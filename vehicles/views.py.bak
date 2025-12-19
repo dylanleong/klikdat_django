@@ -160,7 +160,7 @@ class VehicleViewSet(viewsets.ModelViewSet):
     
     pagination_class = StandardResultsSetPagination
     filter_backends = [filters.SearchFilter]
-    search_fields = ['make__make', 'model__model', 'location', 'year', 'title', 'description']
+    search_fields = ['make__name', 'model__name', 'location', 'year']
     
     def get_queryset(self):
         queryset = super().get_queryset()
@@ -186,35 +186,30 @@ class VehicleViewSet(viewsets.ModelViewSet):
         make = self.request.query_params.get('make', None)
         if make is not None:
             queryset = queryset.filter(make_id=make)
-
-        # Filter by model
-        model = self.request.query_params.get('model', None)
-        if model is not None:
-            queryset = queryset.filter(model_id=model)
         
         # Filter by price range
-        price_min = self.request.query_params.get('price_min', None)
-        price_max = self.request.query_params.get('price_max', None)
-        if price_min:
-            queryset = queryset.filter(price__gte=price_min)
-        if price_max:
-            queryset = queryset.filter(price__lte=price_max)
+        min_price = self.request.query_params.get('min_price', None)
+        max_price = self.request.query_params.get('max_price', None)
+        if min_price is not None:
+            queryset = queryset.filter(price__gte=min_price)
+        if max_price is not None:
+            queryset = queryset.filter(price__lte=max_price)
         
         # Filter by year range
-        year_min = self.request.query_params.get('year_min', None)
-        year_max = self.request.query_params.get('year_max', None)
-        if year_min:
-            queryset = queryset.filter(year__gte=year_min)
-        if year_max:
-            queryset = queryset.filter(year__lte=year_max)
+        min_year = self.request.query_params.get('min_year', None)
+        max_year = self.request.query_params.get('max_year', None)
+        if min_year is not None:
+            queryset = queryset.filter(year__gte=min_year)
+        if max_year is not None:
+            queryset = queryset.filter(year__lte=max_year)
             
         # Filter by mileage range
-        mileage_min = self.request.query_params.get('mileage_min', None)
-        mileage_max = self.request.query_params.get('mileage_max', None)
-        if mileage_min:
-            queryset = queryset.filter(mileage__gte=mileage_min)
-        if mileage_max:
-            queryset = queryset.filter(mileage__lte=mileage_max)
+        min_mileage = self.request.query_params.get('min_mileage', None)
+        max_mileage = self.request.query_params.get('max_mileage', None)
+        if min_mileage is not None:
+            queryset = queryset.filter(mileage__gte=min_mileage)
+        if max_mileage is not None:
+            queryset = queryset.filter(mileage__lte=max_mileage)
             
         # Filter by location (partial match)
         location = self.request.query_params.get('location', None)
@@ -232,10 +227,10 @@ class VehicleViewSet(viewsets.ModelViewSet):
         
         reserved_params = {
             'page', 'limit', 'ordering', 'search', 
-            'owner', 'vehicle_type', 'make', 'model',
-            'price_min', 'price_max', 
-            'year_min', 'year_max', 
-            'mileage_min', 'mileage_max',
+            'owner', 'vehicle_type', 'make', 
+            'min_price', 'max_price', 
+            'min_year', 'max_year', 
+            'min_mileage', 'max_mileage',
             'location'
         }
         
@@ -286,11 +281,6 @@ class VehicleViewSet(viewsets.ModelViewSet):
         facets = {}
         
         # 1. Standard Fields
-        from django.db.models import Min, Max
-        price_stats = queryset.aggregate(min_price=Min('price'), max_price=Max('price'))
-        facets['price_min_val'] = price_stats['min_price']
-        facets['price_max_val'] = price_stats['max_price']
-
         # Make
         facets['makes'] = queryset.values('make__id', 'make__make').annotate(count=Count('id')).order_by('-count')
         # Models

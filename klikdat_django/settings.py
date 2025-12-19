@@ -70,6 +70,7 @@ INSTALLED_APPS = [
     'users',
     'geo',
     'locations',
+    'django.contrib.gis',
     'import_export',
 ]
 
@@ -134,7 +135,7 @@ if DATABASE_HOST == 'db':
 
 DATABASES = {
      'default': {
-         'ENGINE': 'django.db.backends.{}'.format(DATABASE_ENGINE),
+         'ENGINE': 'django.contrib.gis.db.backends.postgis',
          'NAME': os.getenv('DATABASE_NAME', 'polls'),
          'USER': os.getenv('DATABASE_USERNAME', 'myprojectuser'),
          'PASSWORD': os.getenv('DATABASE_PASSWORD', 'password'),

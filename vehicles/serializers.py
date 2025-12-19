@@ -1,8 +1,8 @@
 from rest_framework import serializers
 from .models import (
     VehicleType, Make, Model,
-    SellerType, Vehicle, VehicleImage, Favorite,
-    VehicleProfile
+    SellerType, Vehicle, VehicleImage, SavedVehicle,
+    SellerProfile, BuyerProfile, SavedSearch, SellerReview
 )
 from .models_attributes import VehicleAttribute, VehicleAttributeOption
 
@@ -13,11 +13,11 @@ class VehicleImageSerializer(serializers.ModelSerializer):
         fields = ['id', 'image', 'is_primary', 'created_at']
 
 
-class FavoriteSerializer(serializers.ModelSerializer):
+class SavedVehicleSerializer(serializers.ModelSerializer):
     vehicle_details = serializers.SerializerMethodField()
     
     class Meta:
-        model = Favorite
+        model = SavedVehicle
         fields = ['id', 'vehicle', 'vehicle_details', 'created_at']
         read_only_fields = ['created_at']
         
@@ -95,6 +95,7 @@ class VehicleSerializer(serializers.ModelSerializer):
             'model', 'model_name',
             'seller_type', 'seller_type_name',
             'price', 'year', 'mileage', 'location',
+            'video_url', 'is_hidden',
             'num_doors', 'num_seats',
             'battery_range', 'charging_time',
             'engine_size', 'engine_power', 'acceleration', 'fuel_consumption',
@@ -157,23 +158,51 @@ class VehicleSerializer(serializers.ModelSerializer):
     def get_is_favorited(self, obj):
         user = self.context['request'].user
         if user.is_authenticated:
-            return obj.favorited_by.filter(user=user).exists()
-        return False
-        
-    def get_is_favorited(self, obj):
-        user = self.context['request'].user
-        if user.is_authenticated:
-            return obj.favorited_by.filter(user=user).exists()
+            return obj.saved_by.filter(user=user).exists()
         return False
 
 
 
 
-class VehicleProfileSerializer(serializers.ModelSerializer):
+class SellerProfileSerializer(serializers.ModelSerializer):
     seller_type_name = serializers.CharField(source='seller_type.seller_type', read_only=True)
+    rating = serializers.SerializerMethodField()
     
     class Meta:
-        model = VehicleProfile
-        fields = ['id', 'user', 'seller_type', 'seller_type_name', 'display_name', 'contact_number']
+        model = SellerProfile
+        fields = [
+            'id', 'user', 'seller_type', 'seller_type_name', 'display_name', 
+            'contact_number', 'address_line_1', 'address_line_2', 'city', 
+            'country', 'website', 'phone_number', 'opening_hours', 'about_us', 
+            'logo', 'rating'
+        ]
         read_only_fields = ['user']
+
+    def get_rating(self, obj):
+        from django.db.models import Avg
+        average = obj.reviews.aggregate(Avg('rating'))['rating__avg']
+        return average if average is not None else 0
+
+
+class BuyerProfileSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = BuyerProfile
+        fields = ['id', 'user', 'subscription_preferences', 'notification_settings']
+        read_only_fields = ['user']
+
+
+class SavedSearchSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = SavedSearch
+        fields = ['id', 'user', 'name', 'query_params', 'notification_enabled', 'created_at']
+        read_only_fields = ['user', 'created_at']
+
+
+class SellerReviewSerializer(serializers.ModelSerializer):
+    reviewer_username = serializers.CharField(source='reviewer.username', read_only=True)
+    
+    class Meta:
+        model = SellerReview
+        fields = ['id', 'seller', 'reviewer', 'reviewer_username', 'rating', 'comment', 'created_at']
+        read_only_fields = ['reviewer', 'created_at']
 

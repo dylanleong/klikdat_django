@@ -53,7 +53,7 @@ class IsoRegion(models.Model):
     region_name = models.CharField(max_length=100)
 
     class Meta:
-        unique_together = ('country_code', 'region_code')
+        unique_together = ('country_code', 'region_code', 'region_name')
 
     def __str__(self):
         return f"{self.country_code} - {self.region_name} ({self.region_code})"

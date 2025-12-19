@@ -6,14 +6,16 @@ from rest_framework.pagination import PageNumberPagination
 from django.db.models import Q
 from .models import (
     VehicleType, Make, Model,
-    SellerType, Vehicle, VehicleImage, Favorite, VehicleProfile
+    SellerType, Vehicle, VehicleImage, SavedVehicle, 
+    SellerProfile, BuyerProfile, SavedSearch, SellerReview
 )
 from .models_attributes import VehicleAttribute
 from .serializers import (
     VehicleTypeSerializer, MakeSerializer, ModelSerializer,
     SellerTypeSerializer, VehicleSerializer,
-    VehicleImageSerializer, FavoriteSerializer, VehicleAttributeSerializer,
-    VehicleProfileSerializer
+    VehicleImageSerializer, SavedVehicleSerializer, VehicleAttributeSerializer,
+    SellerProfileSerializer, BuyerProfileSerializer, 
+    SavedSearchSerializer, SellerReviewSerializer
 )
 
 
@@ -77,17 +79,57 @@ class SellerTypeViewSet(viewsets.ModelViewSet):
     permission_classes = [IsAuthenticatedOrReadOnly]
 
 
-class VehicleProfileViewSet(viewsets.ModelViewSet):
-    """ViewSet for user vehicle profiles"""
-    serializer_class = VehicleProfileSerializer
+class SellerProfileViewSet(viewsets.ModelViewSet):
+    """ViewSet for seller profiles"""
+    serializer_class = SellerProfileSerializer
     permission_classes = [IsAuthenticated]
     
     def get_queryset(self):
         # User can only see their own profile
-        return VehicleProfile.objects.filter(user=self.request.user)
+        return SellerProfile.objects.filter(user=self.request.user)
     
     def perform_create(self, serializer):
         serializer.save(user=self.request.user)
+
+
+class BuyerProfileViewSet(viewsets.ModelViewSet):
+    """ViewSet for buyer profiles"""
+    serializer_class = BuyerProfileSerializer
+    permission_classes = [IsAuthenticated]
+    
+    def get_queryset(self):
+        return BuyerProfile.objects.filter(user=self.request.user)
+    
+    def perform_create(self, serializer):
+        serializer.save(user=self.request.user)
+
+
+class SavedSearchViewSet(viewsets.ModelViewSet):
+    """ViewSet for user's saved searches"""
+    serializer_class = SavedSearchSerializer
+    permission_classes = [IsAuthenticated]
+    
+    def get_queryset(self):
+        return SavedSearch.objects.filter(user=self.request.user)
+    
+    def perform_create(self, serializer):
+        serializer.save(user=self.request.user)
+
+
+class SellerReviewViewSet(viewsets.ModelViewSet):
+    """ViewSet for seller reviews"""
+    serializer_class = SellerReviewSerializer
+    permission_classes = [IsAuthenticatedOrReadOnly]
+    
+    def get_queryset(self):
+        queryset = SellerReview.objects.all()
+        seller_id = self.request.query_params.get('seller', None)
+        if seller_id:
+            queryset = queryset.filter(seller_id=seller_id)
+        return queryset
+    
+    def perform_create(self, serializer):
+        serializer.save(reviewer=self.request.user)
 
 
 class VehicleAttributeViewSet(viewsets.ReadOnlyModelViewSet):
@@ -122,6 +164,13 @@ class VehicleViewSet(viewsets.ModelViewSet):
     
     def get_queryset(self):
         queryset = super().get_queryset()
+        
+        # Filter out hidden ads, unless viewed by owner
+        if not self.request.user.is_authenticated:
+            queryset = queryset.filter(is_hidden=False)
+        else:
+            # Users can see their own hidden ads, but not others'
+            queryset = queryset.filter(Q(is_hidden=False) | Q(owner=self.request.user))
         
         # Filter by owner if requested
         owner_id = self.request.query_params.get('owner', None)
@@ -331,19 +380,19 @@ class VehicleViewSet(viewsets.ModelViewSet):
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
     @action(detail=True, methods=['post'], permission_classes=[IsAuthenticated])
-    def favorite(self, request, pk=None):
-        """Toggle favorite status for a vehicle"""
+    def toggle_save(self, request, pk=None):
+        """Toggle saved status for a vehicle (formerly favorite)"""
         vehicle = self.get_object()
         user = request.user
         
-        favorite, created = Favorite.objects.get_or_create(user=user, vehicle=vehicle)
+        saved, created = SavedVehicle.objects.get_or_create(user=user, vehicle=vehicle)
         
         if not created:
-            # If already favorited, remove it
-            favorite.delete()
-            return Response({"status": "removed from favorites"}, status=status.HTTP_200_OK)
+            # If already saved, remove it
+            saved.delete()
+            return Response({"status": "removed from saved"}, status=status.HTTP_200_OK)
             
-        return Response({"status": "added to favorites"}, status=status.HTTP_201_CREATED)
+        return Response({"status": "added to saved"}, status=status.HTTP_201_CREATED)
 
     @action(detail=True, methods=['post'], permission_classes=[IsAuthenticated])
     def contact(self, request, pk=None):
@@ -396,12 +445,12 @@ class VehicleViewSet(viewsets.ModelViewSet):
             )
 
 
-class FavoriteViewSet(viewsets.ReadOnlyModelViewSet):
-    """ViewSet for user's favorite vehicles"""
-    serializer_class = FavoriteSerializer
+class SavedVehicleViewSet(viewsets.ReadOnlyModelViewSet):
+    """ViewSet for user's saved vehicles"""
+    serializer_class = SavedVehicleSerializer
     permission_classes = [IsAuthenticated]
     
     def get_queryset(self):
-        return Favorite.objects.filter(user=self.request.user).select_related(
+        return SavedVehicle.objects.filter(user=self.request.user).select_related(
             'vehicle', 'vehicle__make', 'vehicle__model'
         )

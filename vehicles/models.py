@@ -59,15 +59,66 @@ class SellerType(models.Model):
         ordering = ['seller_type']
 
 
-class VehicleProfile(models.Model):
-    """User profile specific to the vehicles module"""
-    user = models.OneToOneField(User, on_delete=models.CASCADE)
+class SellerProfile(models.Model):
+    """User profile specific to the vehicles module (Sellers)"""
+    user = models.OneToOneField(User, on_delete=models.CASCADE, related_name='seller_profile')
     seller_type = models.ForeignKey(SellerType, on_delete=models.PROTECT)
     display_name = models.CharField(max_length=100, blank=True, help_text="Optional display name for listings")
     contact_number = models.CharField(max_length=20, blank=True, help_text="Contact number for vehicle sales")
     
+    # New fields
+    address_line_1 = models.CharField(max_length=255, blank=True)
+    address_line_2 = models.CharField(max_length=255, blank=True)
+    city = models.CharField(max_length=100, blank=True)
+    country = models.CharField(max_length=100, blank=True)
+    website = models.URLField(blank=True)
+    phone_number = models.CharField(max_length=20, blank=True)
+    opening_hours = models.JSONField(default=dict, blank=True, help_text="JSON mapping for different days")
+    about_us = models.TextField(blank=True)
+    logo = models.ImageField(upload_to='seller_logos/', null=True, blank=True)
+    
     def __str__(self):
-        return f"{self.user.username}'s Vehicle Profile"
+        return f"{self.user.username}'s Seller Profile"
+
+
+class BuyerProfile(models.Model):
+    """User profile specific to the vehicles module (Buyers)"""
+    user = models.OneToOneField(User, on_delete=models.CASCADE, related_name='buyer_profile')
+    subscription_preferences = models.JSONField(default=dict, blank=True, help_text="Preferences for app notifications")
+    notification_settings = models.JSONField(default=dict, blank=True, help_text="Custom notification settings for searches")
+    
+    def __str__(self):
+        return f"{self.user.username}'s Buyer Profile"
+
+
+class SavedSearch(models.Model):
+    """Model for buyers to save their searches"""
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='saved_searches')
+    name = models.CharField(max_length=100)
+    query_params = models.JSONField(help_text="The search query parameters")
+    notification_enabled = models.BooleanField(default=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    
+    def __str__(self):
+        return f"{self.user.username}'s search: {self.name}"
+
+    class Meta:
+        verbose_name_plural = "Saved Searches"
+
+
+class SellerReview(models.Model):
+    """Model for reviews on sellers"""
+    seller = models.ForeignKey(SellerProfile, on_delete=models.CASCADE, related_name='reviews')
+    reviewer = models.ForeignKey(User, on_delete=models.CASCADE, related_name='given_reviews')
+    rating = models.PositiveSmallIntegerField(help_text="Rating from 1 to 5")
+    comment = models.TextField(blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    
+    def __str__(self):
+        return f"Review for {self.seller.user.username} by {self.reviewer.username}: {self.rating}"
+
+    class Meta:
+        ordering = ['-created_at']
 
 
 class Vehicle(models.Model):
@@ -86,6 +137,10 @@ class Vehicle(models.Model):
     year = models.IntegerField(null=True, blank=True)
     mileage = models.IntegerField(help_text="Mileage in kilometers", null=True, blank=True)
     location = models.CharField(max_length=200, null=True, blank=True)
+    
+    # New fields
+    is_hidden = models.BooleanField(default=False, help_text="Flag to hide the ad")
+    video_url = models.URLField(null=True, blank=True, help_text="URL link to the video of the vehicle")
     
     # Dynamic specifications
     specifications = models.JSONField(default=dict, blank=True)
@@ -192,10 +247,10 @@ class VehicleImage(models.Model):
         super().save(*args, **kwargs)
 
 
-class Favorite(models.Model):
-    """Model for user favorite vehicles"""
-    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='favorites')
-    vehicle = models.ForeignKey(Vehicle, on_delete=models.CASCADE, related_name='favorited_by')
+class SavedVehicle(models.Model):
+    """Model for user saved vehicles (formerly favorites)"""
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='saved_vehicles')
+    vehicle = models.ForeignKey(Vehicle, on_delete=models.CASCADE, related_name='saved_by')
     created_at = models.DateTimeField(auto_now_add=True)
     
     class Meta:
@@ -203,4 +258,4 @@ class Favorite(models.Model):
         ordering = ['-created_at']
     
     def __str__(self):
-        return f"{self.user.username} likes {self.vehicle}"
+        return f"{self.user.username} saved {self.vehicle}"

@@ -1,7 +1,8 @@
 from django.contrib import admin
 from .models import (
     VehicleType, Make, Model,
-    SellerType, Vehicle, VehicleProfile, VehicleImage
+    SellerType, Vehicle, SellerProfile, BuyerProfile, 
+    SavedSearch, SellerReview, SavedVehicle, VehicleImage
 )
 from .models_attributes import VehicleAttribute, VehicleAttributeOption
 from import_export.admin import ImportExportModelAdmin
@@ -69,17 +70,43 @@ class SellerTypeAdmin(ImportExportModelAdmin):
     resource_class = SellerTypeResource
 
 
-@admin.register(VehicleProfile)
-class VehicleProfileAdmin(admin.ModelAdmin):
-    list_display = ['user', 'seller_type', 'display_name']
-    list_filter = ['seller_type']
-    search_fields = ['user__username', 'display_name']
+@admin.register(SellerProfile)
+class SellerProfileAdmin(admin.ModelAdmin):
+    list_display = ['user', 'seller_type', 'display_name', 'city', 'country']
+    list_filter = ['seller_type', 'country']
+    search_fields = ['user__username', 'display_name', 'city']
+
+
+@admin.register(BuyerProfile)
+class BuyerProfileAdmin(admin.ModelAdmin):
+    list_display = ['user']
+    search_fields = ['user__username']
+
+
+@admin.register(SavedSearch)
+class SavedSearchAdmin(admin.ModelAdmin):
+    list_display = ['user', 'name', 'notification_enabled', 'created_at']
+    list_filter = ['notification_enabled', 'created_at']
+    search_fields = ['user__username', 'name']
+
+
+@admin.register(SellerReview)
+class SellerReviewAdmin(admin.ModelAdmin):
+    list_display = ['seller', 'reviewer', 'rating', 'created_at']
+    list_filter = ['rating', 'created_at']
+    search_fields = ['seller__user__username', 'reviewer__username', 'comment']
+
+
+@admin.register(SavedVehicle)
+class SavedVehicleAdmin(admin.ModelAdmin):
+    list_display = ['user', 'vehicle', 'created_at']
+    search_fields = ['user__username', 'vehicle__title']
 
 
 @admin.register(Vehicle)
 class VehicleAdmin(admin.ModelAdmin):
-    list_display = ['id', 'title', 'year', 'make', 'model', 'price', 'owner', 'created_at']
-    list_filter = ['vehicle_type', 'make', 'seller_type']
+    list_display = ['id', 'title', 'year', 'make', 'model', 'price', 'owner', 'is_hidden', 'created_at']
+    list_filter = ['vehicle_type', 'make', 'seller_type', 'is_hidden']
     search_fields = ['title', 'description', 'make__make', 'model__model', 'owner__username', 'location']
     date_hierarchy = 'created_at'
     readonly_fields = ['created_at', 'updated_at']
@@ -87,7 +114,7 @@ class VehicleAdmin(admin.ModelAdmin):
     
     fieldsets = (
         ('Basic Information', {
-            'fields': ('owner', 'title', 'description', 'vehicle_type', 'make', 'model', 'year', 'price', 'location')
+            'fields': ('owner', 'title', 'description', 'vehicle_type', 'make', 'model', 'year', 'price', 'location', 'video_url', 'is_hidden')
         }),
         ('Specifications', {
             'fields': ('seller_type', 'mileage', 'specifications')

@@ -2,7 +2,7 @@ from rest_framework import serializers
 from .models import (
     VehicleType, Make, Model,
     SellerType, Vehicle, VehicleImage, SavedVehicle,
-    SellerProfile, BuyerProfile, SavedSearch, SellerReview
+    SellerProfile, BuyerProfile, SavedSearch
 )
 from .models_attributes import VehicleAttribute, VehicleAttributeOption
 
@@ -65,6 +65,7 @@ class VehicleSerializer(serializers.ModelSerializer):
     make_name = serializers.CharField(source='make.make', read_only=True)
     model_name = serializers.CharField(source='model.model', read_only=True)
     seller_type_name = serializers.CharField(source='seller_type.seller_type', read_only=True)
+    business_name = serializers.CharField(source='business.name', read_only=True)
     images = VehicleImageSerializer(many=True, read_only=True)
     is_favorited = serializers.SerializerMethodField()
     
@@ -72,6 +73,7 @@ class VehicleSerializer(serializers.ModelSerializer):
         model = Vehicle
         fields = [
             'id', 'owner', 'owner_username',
+            'business', 'business_name',
             'title', 'description',
             'vehicle_type', 'vehicle_type_name',
             'make', 'make_name',
@@ -136,6 +138,15 @@ class VehicleSerializer(serializers.ModelSerializer):
                     "model": f"Model '{model.model}' is defined as '{model.vehicle_type.vehicle_type}', not '{vehicle_type.vehicle_type}'."
                 })
 
+        # Validate Business Ownership
+        business = data.get('business')
+        user = self.context['request'].user
+        
+        if business and business.owner != user:
+            raise serializers.ValidationError({
+                "business": "You can only list a vehicle under a business you own."
+            })
+            
         return data
     
     def get_is_favorited(self, obj):
@@ -149,22 +160,13 @@ class VehicleSerializer(serializers.ModelSerializer):
 
 class SellerProfileSerializer(serializers.ModelSerializer):
     seller_type_name = serializers.CharField(source='seller_type.seller_type', read_only=True)
-    rating = serializers.SerializerMethodField()
+    business_name = serializers.CharField(source='business.name', read_only=True)
     
     class Meta:
         model = SellerProfile
         fields = [
-            'id', 'user', 'seller_type', 'seller_type_name', 'display_name', 
-            'contact_number', 'address_line_1', 'address_line_2', 'city', 
-            'country', 'website', 'phone_number', 'opening_hours', 'about_us', 
-            'logo', 'rating'
+            'id', 'business', 'business_name', 'seller_type', 'seller_type_name'
         ]
-        read_only_fields = ['user']
-
-    def get_rating(self, obj):
-        from django.db.models import Avg
-        average = obj.reviews.aggregate(Avg('rating'))['rating__avg']
-        return average if average is not None else 0
 
 
 class BuyerProfileSerializer(serializers.ModelSerializer):
@@ -181,13 +183,7 @@ class SavedSearchSerializer(serializers.ModelSerializer):
         read_only_fields = ['user', 'created_at']
 
 
-class SellerReviewSerializer(serializers.ModelSerializer):
-    reviewer_username = serializers.CharField(source='reviewer.username', read_only=True)
-    
-    class Meta:
-        model = SellerReview
-        fields = ['id', 'seller', 'reviewer', 'reviewer_username', 'rating', 'comment', 'created_at']
-        read_only_fields = ['reviewer', 'created_at']
+# REPLACED: SellerReviewSerializer is now BusinessReviewSerializer
 class SavedVehicleSerializer(serializers.ModelSerializer):
     vehicle_details = VehicleSerializer(source='vehicle', read_only=True)
     

@@ -5,8 +5,7 @@ from .views import (
     SellerTypeViewSet, VehicleViewSet,
     VehicleAttributeViewSet, 
     SellerProfileViewSet, BuyerProfileViewSet,
-    SavedSearchViewSet, SellerReviewViewSet,
-    SavedVehicleViewSet
+    SavedSearchViewSet, SavedVehicleViewSet
 )
 
 router = DefaultRouter()
@@ -19,7 +18,7 @@ router.register(r'attributes', VehicleAttributeViewSet, basename='attribute')
 router.register(r'seller-profiles', SellerProfileViewSet, basename='sellerprofile')
 router.register(r'buyer-profiles', BuyerProfileViewSet, basename='buyerprofile')
 router.register(r'saved-searches', SavedSearchViewSet, basename='savedsearch')
-router.register(r'seller-reviews', SellerReviewViewSet, basename='sellerreview')
+# REPLACED: SellerReviewViewSet is now BusinessReviewViewSet
 router.register(r'', VehicleViewSet, basename='vehicle')
 
 urlpatterns = [

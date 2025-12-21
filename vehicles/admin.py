@@ -2,7 +2,7 @@ from django.contrib import admin
 from .models import (
     VehicleType, Make, Model,
     SellerType, Vehicle, SellerProfile, BuyerProfile, 
-    SavedSearch, SellerReview, SavedVehicle, VehicleImage
+    SavedSearch, SavedVehicle, VehicleImage
 )
 from .models_attributes import VehicleAttribute, VehicleAttributeOption
 from import_export.admin import ImportExportModelAdmin
@@ -72,9 +72,9 @@ class SellerTypeAdmin(ImportExportModelAdmin):
 
 @admin.register(SellerProfile)
 class SellerProfileAdmin(admin.ModelAdmin):
-    list_display = ['user', 'seller_type', 'display_name', 'city', 'country']
-    list_filter = ['seller_type', 'country']
-    search_fields = ['user__username', 'display_name', 'city']
+    list_display = ['business', 'seller_type']
+    list_filter = ['seller_type']
+    search_fields = ['business__name', 'business__owner__username']
 
 
 @admin.register(BuyerProfile)
@@ -90,11 +90,7 @@ class SavedSearchAdmin(admin.ModelAdmin):
     search_fields = ['user__username', 'name']
 
 
-@admin.register(SellerReview)
-class SellerReviewAdmin(admin.ModelAdmin):
-    list_display = ['seller', 'reviewer', 'rating', 'created_at']
-    list_filter = ['rating', 'created_at']
-    search_fields = ['seller__user__username', 'reviewer__username', 'comment']
+# REPLACED: SellerReview is now BusinessReview
 
 
 @admin.register(SavedVehicle)

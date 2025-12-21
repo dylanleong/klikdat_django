@@ -2,9 +2,16 @@ from django.contrib.auth.models import User
 from rest_framework import serializers
 from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
 
+from django.contrib.auth.signals import user_logged_in
+
 class CustomTokenObtainPairSerializer(TokenObtainPairSerializer):
     def validate(self, attrs):
         data = super().validate(attrs)
+        
+        # Manually trigger user_logged_in signal because SimpleJWT doesn't
+        request = self.context.get('request')
+        if request:
+            user_logged_in.send(sender=self.user.__class__, user=self.user, request=request)
         
         # Add extra responses here
         serializer = UserSerializer(self.user)

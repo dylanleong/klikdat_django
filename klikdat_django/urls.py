@@ -32,7 +32,9 @@ urlpatterns = [
     path('api/chat/', include('chat.urls')),
     path('api/vehicles/', include('vehicles.urls')),
     path('api/users/', include('users.urls')),
+    path('api/business/', include('business.urls')),
     path('api/locations/', include('locations.urls')),
+    path('api/matchmake/', include('matchmake.urls')),
     path('accounts/', include('allauth.urls')),
 ]
 

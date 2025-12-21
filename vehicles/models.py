@@ -60,25 +60,12 @@ class SellerType(models.Model):
 
 
 class SellerProfile(models.Model):
-    """User profile specific to the vehicles module (Sellers)"""
-    user = models.OneToOneField(User, on_delete=models.CASCADE, related_name='seller_profile')
+    """Business profile specific to the vehicles module (Sellers)"""
+    business = models.OneToOneField('business.BusinessProfile', on_delete=models.CASCADE, related_name='seller_profile')
     seller_type = models.ForeignKey(SellerType, on_delete=models.PROTECT)
-    display_name = models.CharField(max_length=100, blank=True, help_text="Optional display name for listings")
-    contact_number = models.CharField(max_length=20, blank=True, help_text="Contact number for vehicle sales")
-    
-    # New fields
-    address_line_1 = models.CharField(max_length=255, blank=True)
-    address_line_2 = models.CharField(max_length=255, blank=True)
-    city = models.CharField(max_length=100, blank=True)
-    country = models.CharField(max_length=100, blank=True)
-    website = models.URLField(blank=True)
-    phone_number = models.CharField(max_length=20, blank=True)
-    opening_hours = models.JSONField(default=dict, blank=True, help_text="JSON mapping for different days")
-    about_us = models.TextField(blank=True)
-    logo = models.ImageField(upload_to='seller_logos/', null=True, blank=True)
     
     def __str__(self):
-        return f"{self.user.username}'s Seller Profile"
+        return f"Seller Profile for {self.business.name}"
 
 
 class BuyerProfile(models.Model):
@@ -106,19 +93,7 @@ class SavedSearch(models.Model):
         verbose_name_plural = "Saved Searches"
 
 
-class SellerReview(models.Model):
-    """Model for reviews on sellers"""
-    seller = models.ForeignKey(SellerProfile, on_delete=models.CASCADE, related_name='reviews')
-    reviewer = models.ForeignKey(User, on_delete=models.CASCADE, related_name='given_reviews')
-    rating = models.PositiveSmallIntegerField(help_text="Rating from 1 to 5")
-    comment = models.TextField(blank=True)
-    created_at = models.DateTimeField(auto_now_add=True)
-    
-    def __str__(self):
-        return f"Review for {self.seller.user.username} by {self.reviewer.username}: {self.rating}"
-
-    class Meta:
-        ordering = ['-created_at']
+# REPLACED: SellerReview is now handled by business.BusinessReview
 
 
 class Vehicle(models.Model):
@@ -129,6 +104,7 @@ class Vehicle(models.Model):
     make = models.ForeignKey(Make, on_delete=models.PROTECT)
     model = models.ForeignKey(Model, on_delete=models.PROTECT)
     seller_type = models.ForeignKey(SellerType, on_delete=models.PROTECT, null=True, blank=True)
+    business = models.ForeignKey('business.BusinessProfile', on_delete=models.CASCADE, related_name='vehicles')
     
     # Basic information
     title = models.CharField(max_length=200, null=True, blank=True, help_text="Short title/headline for the listing")

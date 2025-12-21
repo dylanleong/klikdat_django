@@ -7,7 +7,7 @@ from django.db.models import Q
 from .models import (
     VehicleType, Make, Model,
     SellerType, Vehicle, VehicleImage, SavedVehicle, 
-    SellerProfile, BuyerProfile, SavedSearch, SellerReview
+    SellerProfile, BuyerProfile, SavedSearch
 )
 from .models_attributes import VehicleAttribute
 from .serializers import (
@@ -15,7 +15,7 @@ from .serializers import (
     SellerTypeSerializer, VehicleSerializer,
     VehicleImageSerializer, SavedVehicleSerializer, VehicleAttributeSerializer,
     SellerProfileSerializer, BuyerProfileSerializer, 
-    SavedSearchSerializer, SellerReviewSerializer
+    SavedSearchSerializer
 )
 
 
@@ -85,11 +85,16 @@ class SellerProfileViewSet(viewsets.ModelViewSet):
     permission_classes = [IsAuthenticated]
     
     def get_queryset(self):
-        # User can only see their own profile
-        return SellerProfile.objects.filter(user=self.request.user)
+        # User can only see profiles for businesses they own
+        return SellerProfile.objects.filter(business__owner=self.request.user)
     
     def perform_create(self, serializer):
-        serializer.save(user=self.request.user)
+        # The business must be owned by the user
+        business = serializer.validated_data.get('business')
+        if business.owner != self.request.user:
+            from rest_framework.exceptions import PermissionDenied
+            raise PermissionDenied("You can only create a seller profile for your own business.")
+        serializer.save()
 
 
 class BuyerProfileViewSet(viewsets.ModelViewSet):
@@ -116,20 +121,7 @@ class SavedSearchViewSet(viewsets.ModelViewSet):
         serializer.save(user=self.request.user)
 
 
-class SellerReviewViewSet(viewsets.ModelViewSet):
-    """ViewSet for seller reviews"""
-    serializer_class = SellerReviewSerializer
-    permission_classes = [IsAuthenticatedOrReadOnly]
-    
-    def get_queryset(self):
-        queryset = SellerReview.objects.all()
-        seller_id = self.request.query_params.get('seller', None)
-        if seller_id:
-            queryset = queryset.filter(seller_id=seller_id)
-        return queryset
-    
-    def perform_create(self, serializer):
-        serializer.save(reviewer=self.request.user)
+# REPLACED: SellerReviewViewSet is now BusinessReviewViewSet in business app
 
 
 class VehicleAttributeViewSet(viewsets.ReadOnlyModelViewSet):
@@ -355,7 +347,20 @@ class VehicleViewSet(viewsets.ModelViewSet):
     
     def perform_create(self, serializer):
         # Automatically set the owner to the current user
-        serializer.save(owner=self.request.user)
+        # And default to private business profile if not specified
+        business = serializer.validated_data.get('business')
+        if not business:
+            from business.models import BusinessProfile
+            business = BusinessProfile.objects.filter(owner=self.request.user, is_private=True).first()
+            if not business:
+                # This should not happen due to signals, but as a fallback
+                business = BusinessProfile.objects.create(
+                    owner=self.request.user,
+                    name=f"Private Profile ({self.request.user.username})",
+                    is_private=True
+                )
+        
+        serializer.save(owner=self.request.user, business=business)
     
     def perform_update(self, serializer):
         # Only allow owners to update their own vehicles

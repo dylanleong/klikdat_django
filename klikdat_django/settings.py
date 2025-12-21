@@ -76,6 +76,8 @@ INSTALLED_APPS = [
     'allauth.account',
     'allauth.socialaccount',
     'django_q',
+    'business',
+    'matchmake',
 ]
 
 MIDDLEWARE = [

@@ -3,6 +3,7 @@ from django.db.models.signals import post_delete, post_save
 from django.dispatch import receiver
 from django.contrib.auth.models import User
 from .models import Vehicle, SellerProfile, BuyerProfile, SellerType, VehicleImage
+from business.models import BusinessProfile
 import os
 
 @receiver(post_delete, sender=VehicleImage)
@@ -18,10 +19,10 @@ def cleanup_vehicle_image_file(sender, instance, **kwargs):
 
 @receiver(post_save, sender=Vehicle)
 def ensure_seller_profile_and_seller_type(sender, instance, created, **kwargs):
-    if created and instance.owner:
-        # Get or create seller profile for the owner
+    if created and instance.business:
+        # Get or create seller profile for the business
         profile, _ = SellerProfile.objects.get_or_create(
-            user=instance.owner,
+            business=instance.business,
             defaults={'seller_type': SellerType.objects.get_or_create(seller_type='Private')[0]}
         )
         
@@ -32,16 +33,16 @@ def ensure_seller_profile_and_seller_type(sender, instance, created, **kwargs):
 
 
 @receiver(post_save, sender=User)
-def create_user_profiles(sender, instance, created, **kwargs):
+def create_buyer_profile(sender, instance, created, **kwargs):
     if created:
         # Ensure BuyerProfile is created for all new users
         BuyerProfile.objects.get_or_create(user=instance)
-        # We don't necessarily create SellerProfile for everyone, 
-        # but we could if we want every user to be a potential seller.
-        # The user request mentioned 2 different profiles, so let's ensure both exist
-        # or at least Buyer exists, and Seller is created when they post or on demand.
-        # Usually for this kind of app, having both is fine.
+
+@receiver(post_save, sender=BusinessProfile)
+def create_seller_profile(sender, instance, created, **kwargs):
+    if created:
+        # Ensure SellerProfile is created for all new business profiles
         SellerProfile.objects.get_or_create(
-            user=instance,
+            business=instance,
             defaults={'seller_type': SellerType.objects.get_or_create(seller_type='Private')[0]}
         )

@@ -72,6 +72,10 @@ INSTALLED_APPS = [
     'locations',
     'django.contrib.gis',
     'import_export',
+    'allauth',
+    'allauth.account',
+    'allauth.socialaccount',
+    'django_q',
 ]
 
 MIDDLEWARE = [
@@ -84,6 +88,8 @@ MIDDLEWARE = [
     'django.contrib.auth.middleware.AuthenticationMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
+    'allauth.account.middleware.AccountMiddleware',
+    'users.middleware.GeoIPVerificationMiddleware',
 ]
 
 ROOT_URLCONF = 'klikdat_django.urls'
@@ -173,6 +179,7 @@ AUTH_PASSWORD_VALIDATORS = [
 AUTHENTICATION_BACKENDS = [
     'accounts.backends.EmailOrUsernameModelBackend',
     'django.contrib.auth.backends.ModelBackend',
+    'allauth.account.auth_backends.AuthenticationBackend',
 ]
 
 
@@ -226,3 +233,29 @@ SIMPLE_JWT = {
 
 # django-import-export settings
 IMPORT_EXPORT_USE_TRANSACTIONS = True
+
+# django-allauth settings
+ACCOUNT_EMAIL_VERIFICATION = 'mandatory'
+ACCOUNT_EMAIL_REQUIRED = True
+ACCOUNT_AUTHENTICATION_METHOD = 'username_email'
+ACCOUNT_EMAIL_REQUIRED = True
+ACCOUNT_UNIQUE_EMAIL = True
+ACCOUNT_USERNAME_REQUIRED = True
+
+# Email backend for development
+EMAIL_BACKEND = 'django.core.mail.backends.console.EmailBackend'
+
+# Django Q2 settings
+Q_CLUSTER = {
+    'name': 'klikdat_tasks',
+    'workers': 4,
+    'recycle': 500,
+    'timeout': 60,
+    'compress': True,
+    'cpu_affinity': 1,
+    'label': 'Django Q tasks',
+    'orm': 'default'  # Using Django ORM as broker for dev
+}
+
+# GeoIP2 settings
+GEOIP_PATH = BASE_DIR / 'geoip'

@@ -33,6 +33,7 @@ urlpatterns = [
     path('api/vehicles/', include('vehicles.urls')),
     path('api/users/', include('users.urls')),
     path('api/locations/', include('locations.urls')),
+    path('accounts/', include('allauth.urls')),
 ]
 
 from django.conf import settings

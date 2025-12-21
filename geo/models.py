@@ -1,4 +1,4 @@
-from django.db import models
+from django.contrib.gis.db import models
 
 class IpAsn(models.Model):
     start_ip = models.GenericIPAddressField()
@@ -13,7 +13,7 @@ class IpAsn(models.Model):
 class Continent(models.Model):
     name = models.CharField(max_length=100)
     code = models.CharField(max_length=2, unique=True, null=True, blank=True)
-    geometry = models.JSONField(null=True, blank=True)
+    geometry = models.GeometryField(null=True, blank=True)
 
     def __str__(self):
         return self.name
@@ -21,7 +21,7 @@ class Continent(models.Model):
 class WorldBankBoundary(models.Model):
     name = models.CharField(max_length=255)
     iso_code = models.CharField(max_length=3, null=True, blank=True)
-    geometry = models.JSONField(null=True, blank=True)
+    geometry = models.GeometryField(null=True, blank=True)
     level = models.CharField(max_length=50, blank=True)
 
     def __str__(self):
@@ -63,7 +63,7 @@ class GadmBoundary(models.Model):
     gid = models.CharField(max_length=50, unique=True, null=True, blank=True)
     level = models.IntegerField(default=0)
     parent_gid = models.CharField(max_length=50, null=True, blank=True)
-    geometry = models.JSONField(null=True, blank=True)
+    geometry = models.GeometryField(null=True, blank=True)
 
     def __str__(self):
         return f"{self.name} (Level {self.level})"

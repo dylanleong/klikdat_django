@@ -1,12 +1,13 @@
-from django.db.models.signals import post_save
+from django.db.models.signals import post_save, pre_save
 from django.contrib.auth.models import User
 from django.dispatch import receiver
-from .models import Profile
+from .models import Profile, VerificationProfile
 
 @receiver(post_save, sender=User)
 def create_user_profile(sender, instance, created, **kwargs):
     if created:
         Profile.objects.create(user=instance)
+        VerificationProfile.objects.create(user=instance)
 
 @receiver(post_save, sender=User)
 def save_user_profile(sender, instance, **kwargs):
@@ -16,8 +17,14 @@ def save_user_profile(sender, instance, **kwargs):
     else:
         Profile.objects.create(user=instance)
 
+    if hasattr(instance, 'verification_profile'):
+        instance.verification_profile.save()
+    else:
+        VerificationProfile.objects.create(user=instance)
+
 from django.contrib.auth.signals import user_logged_in
-from geo.models import IpAsn
+from geo.models import IpAsn, CountryInfo
+from locations.models import Location
 
 def get_client_ip(request):
     x_forwarded_for = request.META.get('HTTP_X_FORWARDED_FOR')
@@ -27,30 +34,68 @@ def get_client_ip(request):
         ip = request.META.get('REMOTE_ADDR')
     return ip
 
+@receiver(pre_save, sender=Profile)
+def profile_pre_save(sender, instance, **kwargs):
+    """
+    Automatically populate ip_country from ip_address using IpAsn and CountryInfo.
+    """
+    if instance.ip_address:
+        # Check if ip_address has changed or ip_country is empty
+        update_country = False
+        if not instance.pk:
+            update_country = True
+        else:
+            try:
+                old_instance = Profile.objects.get(pk=instance.pk)
+                # Update if IP changed, OR if country is empty, OR if country is not a 2-char code
+                if (old_instance.ip_address != instance.ip_address or 
+                    not instance.ip_country or 
+                    len(instance.ip_country) != 2):
+                    update_country = True
+            except Profile.DoesNotExist:
+                update_country = True
+
+        if update_country:
+            try:
+                ip_asn = IpAsn.objects.filter(start_ip__lte=instance.ip_address, end_ip__gte=instance.ip_address).first()
+                if ip_asn:
+                    instance.ip_country = ip_asn.country_code
+            except Exception as e:
+                import logging
+                logger = logging.getLogger(__name__)
+                logger.error(f"Error looking up IP info for profile {instance.id}: {e}")
+
+@receiver(post_save, sender=Profile)
+def save_location_history(sender, instance, **kwargs):
+    """
+    Log geolocation changes to Location history.
+    """
+    if instance.latitude and instance.longitude:
+        # Avoid creating duplicate history if nothing changed significantly
+        last_history = Location.objects.filter(user=instance.user).order_by('-timestamp').first()
+        if last_history:
+            # Check if coordinates changed since last log
+            if (last_history.latitude != instance.latitude or 
+                last_history.longitude != instance.longitude):
+                Location.objects.create(
+                    user=instance.user,
+                    latitude=instance.latitude,
+                    longitude=instance.longitude
+                )
+        else:
+            # First location record
+            Location.objects.create(
+                user=instance.user,
+                latitude=instance.latitude,
+                longitude=instance.longitude
+            )
+
 @receiver(user_logged_in)
 def update_user_ip_info(sender, user, request, **kwargs):
     ip = get_client_ip(request)
     if ip:
-        # Check if profile exists
         if hasattr(user, 'profile'):
             profile = user.profile
             profile.ip_address = ip
-            
-            # Lookup Country
-            # PostGIS would allow efficient range queries, but for now we rely on standard Django ORM
-            # Assuming start_ip and end_ip are GenericIPAddressField which stores as string in some DBs but 
-            # Postgres handles slightly differently. However, standard string comparison or ipaddress module comparison
-            # is safer if DB support is mixed. 
-            # But since we are using Postgres (based on user context about PostGIS in history), 
-            # standard lte/gte on GenericIPAddressField works correctly for IP semantics in Django + Postgres.
-            
-            try:
-                ip_asn = IpAsn.objects.filter(start_ip__lte=ip, end_ip__gte=ip).first()
-                if ip_asn:
-                    profile.ip_country = ip_asn.country_code
-            except Exception as e:
-                # Log error or silently fail if IP is invalid or lookup fails
-                print(f"Error looking up IP ASN: {e}")
-                pass
-            
+            # Country lookup is now handled by profile_pre_save
             profile.save()

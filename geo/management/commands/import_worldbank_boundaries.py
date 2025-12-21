@@ -71,28 +71,52 @@ class Command(BaseCommand):
             
             for feature in features:
                 props = feature.get('properties', {})
-                # Adjust keys based on World Bank GeoJSON structure
-                name = props.get('NAME') or props.get('name') or props.get('Name') or props.get('Shape_Name')
-                iso_code = props.get('ISO_A3') or props.get('iso_a3') or props.get('ISO3')
-                
-                if not name:
+                geom_data = feature.get('geometry')
+
+                if not geom_data:
                     continue
-                    
-                # We could add a 'level' field to the model if we wanted to distinguish Admin0/1/2
-                # inferred from filename or URL.
+
+                # Skip metadata features often found in GeoJSON
+                if props.get('name') and ('CRS' in props.get('name') or 'crs' in props.get('name')):
+                    continue
+
                 level = ""
                 if "admin0" in filename: level = "Admin 0"
                 elif "admin1" in filename: level = "Admin 1"
                 elif "admin2" in filename: level = "Admin 2"
 
-                WorldBankBoundary.objects.update_or_create(
-                    name=name,
-                    defaults={
-                        'iso_code': iso_code,
-                        'geometry': feature.get('geometry'),
-                        'level': level
-                    }
+                # Dynamic name lookup based on level and common keys
+                name = (
+                    props.get('NAM_2') or 
+                    props.get('NAM_1') or 
+                    props.get('NAM_0') or 
+                    props.get('NAME') or 
+                    props.get('name') or 
+                    props.get('Name') or 
+                    props.get('Shape_Name')
                 )
-                count += 1
+                
+                iso_code = props.get('ISO_A3') or props.get('iso_a3') or props.get('ISO3')
+                
+                if not name:
+                    continue
+                    
+                try:
+                    from django.contrib.gis.geos import GEOSGeometry
+                    # GEOSGeometry can take a GeoJSON string
+                    spatial_geom = GEOSGeometry(json.dumps(geom_data))
+                    
+                    WorldBankBoundary.objects.update_or_create(
+                        name=name,
+                        level=level,
+                        iso_code=iso_code,
+                        defaults={
+                            'geometry': spatial_geom,
+                        }
+                    )
+                    count += 1
+                except Exception as e:
+                    self.stdout.write(self.style.ERROR(f'Failed to process geometry for {name}: {e}'))
+                    continue
                 
             self.stdout.write(self.style.SUCCESS(f'Imported {count} boundaries from {url}'))

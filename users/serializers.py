@@ -1,6 +1,6 @@
 from django.contrib.auth.models import User
 from rest_framework import serializers
-from .models import Profile
+from .models import Profile, VerificationProfile
 
 class ProfileSerializer(serializers.ModelSerializer):
     class Meta:
@@ -8,17 +8,26 @@ class ProfileSerializer(serializers.ModelSerializer):
         fields = ['gender', 'dob', 'phone', 'recovery_email', 'avatar', 'ip_address', 'ip_country', 'latitude', 'longitude', 
                   'address_line_1', 'address_line_2', 'city', 'state', 'postcode', 'country']
 
+class VerificationProfileSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = VerificationProfile
+        fields = ['v1_email', 'v2_phone', 'v3_location', 'v4_gender', 'v5_age', 
+                  'verification_video', 'detected_gender', 'detected_age_range', 'ai_analysis_status', 'level']
+        read_only_fields = ['detected_gender', 'detected_age_range', 'ai_analysis_status', 'level']
+
 class UserSerializer(serializers.ModelSerializer):
     profile = ProfileSerializer(required=False)
+    verification_profile = VerificationProfileSerializer(required=False)
 
     class Meta:
         model = User
-        fields = ['id', 'username', 'email', 'first_name', 'last_name', 'is_staff', 'is_superuser', 'is_active', 'date_joined', 'profile']
+        fields = ['id', 'username', 'email', 'first_name', 'last_name', 'is_staff', 'is_superuser', 'is_active', 'date_joined', 'profile', 'verification_profile']
         read_only_fields = ['date_joined', 'last_login']
         extra_kwargs = {'password': {'write_only': True}}
 
     def create(self, validated_data):
         profile_data = validated_data.pop('profile', None)
+        verification_data = validated_data.pop('verification_profile', None)
         password = validated_data.pop('password', None)
         user = User(**validated_data)
         if password:
@@ -27,12 +36,16 @@ class UserSerializer(serializers.ModelSerializer):
         
         # Profile creation is handled by signal, but we update it if data is provided
         if profile_data and hasattr(user, 'profile'):
-            self.update_profile(user.profile, profile_data)
+            self.update_related(user.profile, profile_data)
+        
+        if verification_data and hasattr(user, 'verification_profile'):
+            self.update_related(user.verification_profile, verification_data)
         
         return user
 
     def update(self, instance, validated_data):
         profile_data = validated_data.pop('profile', None)
+        verification_data = validated_data.pop('verification_profile', None)
         password = validated_data.pop('password', None)
         
         for attr, value in validated_data.items():
@@ -43,14 +56,18 @@ class UserSerializer(serializers.ModelSerializer):
         instance.save()
 
         if profile_data:
-            # Create profile if not exists (healing self)
             if not hasattr(instance, 'profile'):
                  Profile.objects.create(user=instance)
-            self.update_profile(instance.profile, profile_data)
+            self.update_related(instance.profile, profile_data)
+
+        if verification_data:
+            if not hasattr(instance, 'verification_profile'):
+                 VerificationProfile.objects.create(user=instance)
+            self.update_related(instance.verification_profile, verification_data)
 
         return instance
     
-    def update_profile(self, profile, profile_data):
-        for attr, value in profile_data.items():
-            setattr(profile, attr, value)
-        profile.save()
+    def update_related(self, instance, data):
+        for attr, value in data.items():
+            setattr(instance, attr, value)
+        instance.save()

@@ -22,3 +22,4 @@ geoip2
 deepface==0.0.93
 tf-keras==2.18.0
 opencv-python-headless==4.11.0.86
+django-fsm==2.8.2

@@ -9,6 +9,11 @@ from .serializers import (
 )
 from chat.models import ChatRoom
 
+class InterestViewSet(viewsets.ReadOnlyModelViewSet):
+    queryset = Interest.objects.all()
+    serializer_class = InterestSerializer
+    permission_classes = [permissions.IsAuthenticated]
+
 class MatchmakeProfileViewSet(viewsets.ModelViewSet):
     serializer_class = MatchmakeProfileSerializer
     permission_classes = [permissions.IsAuthenticated]
@@ -31,15 +36,46 @@ class DiscoveryViewSet(viewsets.ReadOnlyModelViewSet):
         swiped_ids = Swipe.objects.filter(swiper=user).values_list('swiped_id', flat=True)
         queryset = MatchmakeProfile.objects.exclude(user=user).exclude(user_id__in=swiped_ids)
         
-        if profile:
-            # Basic filters
-            if profile.pref_looking_for != 'Everyone':
-                queryset = queryset.filter(user__profile__gender=profile.pref_looking_for)
+        # Filters from query parameters
+        gender = self.request.query_params.get('gender')
+        min_age = self.request.query_params.get('min_age')
+        max_age = self.request.query_params.get('max_age')
+        interest_ids = self.request.query_params.getlist('interests')
+
+        if gender and gender != 'Everyone':
+            queryset = queryset.filter(user__profile__gender=gender)
+        elif profile and profile.pref_looking_for != 'Everyone':
+            queryset = queryset.filter(user__profile__gender=profile.pref_looking_for)
             
-            # Age filter would go here (requires calculation in DB or filtering here)
-            # Distance filter would go here (requires PostGIS)
+        # Age filtering
+        from datetime import date
+        today = date.today()
+        
+        if min_age:
+            try:
+                min_age = int(min_age)
+                max_dob = date(today.year - min_age, today.month, today.day)
+                queryset = queryset.filter(user__profile__dob__lte=max_dob)
+            except (ValueError, TypeError):
+                pass
+        
+        if max_age:
+            try:
+                max_age = int(max_age)
+                min_dob = date(today.year - max_age - 1, today.month, today.day)
+                queryset = queryset.filter(user__profile__dob__gt=min_dob)
+            except (ValueError, TypeError):
+                pass
+
+        if interest_ids:
+            queryset = queryset.filter(interests__id__in=interest_ids).distinct()
             
         return queryset
+
+    @action(detail=False, methods=['post'])
+    def reset(self, request):
+        Swipe.objects.filter(swiper=request.user).delete()
+        return Response({'status': 'swipes reset'})
 
 class SwipeViewSet(viewsets.ModelViewSet):
     serializer_class = SwipeSerializer
@@ -79,3 +115,19 @@ class MatchViewSet(viewsets.ReadOnlyModelViewSet):
 
     def get_queryset(self):
         return Match.objects.filter(Q(user1=self.request.user) | Q(user2=self.request.user))
+
+class MatchmakePhotoViewSet(viewsets.ModelViewSet):
+    serializer_class = MatchmakePhotoSerializer
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get_queryset(self):
+        # Allow users to manage their own photos
+        return MatchmakePhoto.objects.filter(profile__user=self.request.user)
+
+    def perform_create(self, serializer):
+        # Automatically link to the user's MatchmakeProfile
+        profile = getattr(self.request.user, 'matchmake_profile', None)
+        if not profile:
+            # Create profile if it doesn't exist (though usually it should)
+            profile = MatchmakeProfile.objects.create(user=self.request.user)
+        serializer.save(profile=profile)

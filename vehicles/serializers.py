@@ -89,7 +89,7 @@ class VehicleSerializer(serializers.ModelSerializer):
             'created_at', 'updated_at',
             'images', 'is_favorited'
         ]
-        read_only_fields = ['owner', 'created_at', 'updated_at', 'seller_type']
+        read_only_fields = ['owner', 'created_at', 'updated_at', 'seller_type', 'business']
 
 
     def validate(self, data):

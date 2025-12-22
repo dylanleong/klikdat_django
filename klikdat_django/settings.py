@@ -78,6 +78,8 @@ INSTALLED_APPS = [
     'django_q',
     'business',
     'matchmake',
+    'recruitment',
+    'properties',
 ]
 
 MIDDLEWARE = [

@@ -20,6 +20,19 @@ services:
       - DJANGO_DEBUG
     ports:
       - "1337:8000"
+    volumes:
+      - .:/app
+    env_file:
+      - .env.dev
+    depends_on:
+      - db
+      - redis
+
+  qcluster:
+    build: .
+    command: python manage.py qcluster
+    volumes:
+      - .:/app
     env_file:
       - .env.dev
     depends_on:

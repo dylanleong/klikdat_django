@@ -31,8 +31,25 @@ class JobPostingViewSet(viewsets.ModelViewSet):
         
         # Public list should only show Published jobs
         if self.action == 'list':
-             return queryset.filter(status=JobPosting.Status.PUBLISHED)
+             queryset = queryset.filter(status=JobPosting.Status.PUBLISHED)
         
+        # Filters
+        job_type = self.request.query_params.get('job_type')
+        if job_type:
+             queryset = queryset.filter(job_type=job_type)
+        
+        workplace_type = self.request.query_params.get('workplace_type')
+        if workplace_type:
+             queryset = queryset.filter(workplace_type=workplace_type)
+        
+        salary_min = self.request.query_params.get('salary_min')
+        if salary_min:
+             queryset = queryset.filter(salary_min__gte=salary_min)
+        
+        salary_max = self.request.query_params.get('salary_max')
+        if salary_max:
+             queryset = queryset.filter(salary_max__lte=salary_max)
+
         return queryset
 
     def perform_create(self, serializer):

@@ -6,7 +6,8 @@ from django.core.mail import send_mail
 from django.conf import settings
 from .models import Property, SavedProperty, PropertySavedSearch, PropertyImage
 from .serializers import (
-    PropertySerializer, SavedPropertySerializer, PropertySavedSearchSerializer
+    PropertySerializer, SavedPropertySerializer, PropertySavedSearchSerializer,
+    PropertyImageSerializer
 )
 from business.models import BusinessProfile
 
@@ -117,6 +118,67 @@ class PropertyViewSet(viewsets.ModelViewSet):
             'recipients': len(target_users),
             'emails_sent': email_count
         })
+
+    @action(detail=True, methods=['post'], permission_classes=[permissions.IsAuthenticated])
+    def upload_image(self, request, pk=None):
+        """Upload an image for a property"""
+        property_instance = self.get_object()
+        
+        # Check ownership
+        if property_instance.agent != request.user:
+            return Response(
+                {"detail": "You can only upload images for your own properties."},
+                status=status.HTTP_403_FORBIDDEN
+            )
+            
+        serializer = PropertyImageSerializer(data=request.data)
+        if serializer.is_valid():
+            serializer.save(property=property_instance)
+            return Response(serializer.data, status=status.HTTP_201_CREATED)
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+    @action(detail=True, methods=['post'], permission_classes=[permissions.IsAuthenticated])
+    def upload_floor_plan(self, request, pk=None):
+        """Upload a floor plan for a property"""
+        property_instance = self.get_object()
+        
+        # Check ownership
+        if property_instance.agent != request.user:
+            return Response(
+                {"detail": "You can only upload floor plans for your own properties."},
+                status=status.HTTP_403_FORBIDDEN
+            )
+            
+        floor_plan = request.FILES.get('floor_plan')
+        if floor_plan:
+            property_instance.floor_plan = floor_plan
+            property_instance.save()
+            serializer = self.get_serializer(property_instance)
+            return Response(serializer.data, status=status.HTTP_200_OK)
+        return Response({"error": "No floor plan file provided"}, status=status.HTTP_400_BAD_REQUEST)
+
+    @action(detail=True, methods=['delete'], permission_classes=[permissions.IsAuthenticated])
+    def delete_image(self, request, pk=None):
+        """Delete an image for a property"""
+        property_instance = self.get_object()
+        
+        # Check ownership
+        if property_instance.agent != request.user:
+            return Response(
+                {"detail": "You can only delete images for your own properties."},
+                status=status.HTTP_403_FORBIDDEN
+            )
+            
+        image_id = request.query_params.get('image_id')
+        if not image_id:
+            return Response({"error": "image_id is required"}, status=status.HTTP_400_BAD_REQUEST)
+            
+        try:
+            image = PropertyImage.objects.get(id=image_id, property=property_instance)
+            image.delete()
+            return Response(status=status.HTTP_204_NO_CONTENT)
+        except PropertyImage.DoesNotExist:
+            return Response({"error": "Image not found"}, status=status.HTTP_404_NOT_FOUND)
 
 
 class SavedPropertyViewSet(viewsets.ModelViewSet):

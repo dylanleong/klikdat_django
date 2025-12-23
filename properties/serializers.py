@@ -24,7 +24,7 @@ class PropertySerializer(serializers.ModelSerializer):
             'price', 'currency', 'price_qualifier',
             'bedrooms', 'bathrooms', 'area_sqft',
             'location', 'latitude', 'longitude', 'features', 'status',
-            'images', 'uploaded_images', 'created_at', 'updated_at'
+            'images', 'uploaded_images', 'floor_plan', 'created_at', 'updated_at'
         ]
         read_only_fields = ['business', 'agent', 'created_at', 'updated_at']
 

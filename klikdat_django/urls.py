@@ -37,6 +37,7 @@ urlpatterns = [
     path('api/matchmake/', include('matchmake.urls')),
     path('api/properties/', include('properties.urls')),
     path('api/recruitment/', include('recruitment.urls')),
+    path('api/geo/', include('geo.urls')),
     path('accounts/', include('allauth.urls')),
 ]
 

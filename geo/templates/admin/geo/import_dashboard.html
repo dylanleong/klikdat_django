@@ -1,0 +1,83 @@
+{% extends "admin/base_site.html" %}
+{% load i18n static %}
+
+{% block extrastyle %}{{ block.super }}<link rel="stylesheet" type="text/css" href="{% static "admin/css/forms.css" %}">{% endblock %}
+
+{% block breadcrumbs %}
+<div class="breadcrumbs">
+<a href="{% url 'admin:index' %}">{% trans 'Home' %}</a>
+&rsaquo; <a href="{% url 'admin:app_list' app_label='geo' %}">Geo</a>
+&rsaquo; <a href="{% url 'admin:geo_importtask_changelist' %}">Import Tasks</a>
+&rsaquo; Import Dashboard
+</div>
+{% endblock %}
+
+{% block content %}
+<div id="content-main">
+    <h1>Data Import Dashboard</h1>
+    
+    <div class="module">
+        <h2>Available Import Commands</h2>
+        <table style="width: 100%;">
+            <thead>
+                <tr>
+                    <th>Command</th>
+                    <th>Description</th>
+                    <th>Action</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for cmd in commands %}
+                <tr>
+                    <td><strong>{{ cmd.name }}</strong></td>
+                    <td>{{ cmd.help }}</td>
+                    <td>
+                        <form action="{% url 'admin:geo_import_trigger' %}" method="post">
+                            {% csrf_token %}
+                            <input type="hidden" name="command" value="{{ cmd.name }}">
+                            <input type="submit" value="Run Import" class="default" onclick="return confirm('Are you sure you want to run {{ cmd.name }}?');">
+                        </form>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+
+    <div class="module">
+        <h2>Recent Tasks</h2>
+        <table style="width: 100%;">
+            <thead>
+                <tr>
+                    <th>Command</th>
+                    <th>Status</th>
+                    <th>Started</th>
+                    <th>Completed</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for task in recent_tasks %}
+                <tr>
+                    <td>{{ task.command_name }}</td>
+                    <td>
+                        <span class="status-{{ task.status|lower }}" style="font-weight: bold; color: {% if task.status == 'COMPLETED' %}green{% elif task.status == 'FAILED' %}red{% elif task.status == 'RUNNING' %}blue{% else %}orange{% endif %};">
+                            {{ task.status }}
+                        </span>
+                    </td>
+                    <td>{{ task.started_at|date:"Y-m-d H:i:s" }}</td>
+                    <td>{{ task.completed_at|date:"Y-m-d H:i:s" }}</td>
+                    <td>
+                        <a href="{% url 'admin:geo_importtask_change' task.id %}" class="button">View Logs</a>
+                    </td>
+                </tr>
+                {% empty %}
+                <tr>
+                    <td colspan="5">No recent tasks found.</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endblock %}

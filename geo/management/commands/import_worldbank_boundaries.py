@@ -28,6 +28,10 @@ class Command(BaseCommand):
         import_dir = os.path.join(settings.DATA_IMPORT_ROOT, 'geo')
         os.makedirs(import_dir, exist_ok=True)
         
+        # Truncate table
+        WorldBankBoundary.objects.all().delete()
+        self.stdout.write(self.style.WARNING("Truncated WorldBankBoundary table."))
+
         for url in urls:
             # Generate a clean filename from the URL, or use a manual mapping
             if "Admin 0" in url:
@@ -85,38 +89,29 @@ class Command(BaseCommand):
                 elif "admin1" in filename: level = "Admin 1"
                 elif "admin2" in filename: level = "Admin 2"
 
-                # Dynamic name lookup based on level and common keys
-                name = (
-                    props.get('NAM_2') or 
-                    props.get('NAM_1') or 
-                    props.get('NAM_0') or 
-                    props.get('NAME') or 
-                    props.get('name') or 
-                    props.get('Name') or 
-                    props.get('Shape_Name')
-                )
+                iso_a2 = props.get('ISO_A2') or props.get('iso_a2')
+                adm1_code = props.get('ADM1CD_c') or props.get('adm1cd_c')
+                adm1_name = props.get('NAM_1') or props.get('nam_1')
+                adm2_code = props.get('ADM2CD_c') or props.get('adm2cd_c')
+                adm2_name = props.get('NAM_2') or props.get('nam_2')
                 
-                iso_code = props.get('ISO_A3') or props.get('iso_a3') or props.get('ISO3')
-                
-                if not name:
-                    continue
-                    
                 try:
                     from django.contrib.gis.geos import GEOSGeometry
                     # GEOSGeometry can take a GeoJSON string
                     spatial_geom = GEOSGeometry(json.dumps(geom_data))
                     
-                    WorldBankBoundary.objects.update_or_create(
-                        name=name,
+                    WorldBankBoundary.objects.create(
                         level=level,
-                        iso_code=iso_code,
-                        defaults={
-                            'geometry': spatial_geom,
-                        }
+                        iso_a2=iso_a2,
+                        adm1_code=adm1_code,
+                        adm1_name=adm1_name,
+                        adm2_code=adm2_code,
+                        adm2_name=adm2_name,
+                        geometry=spatial_geom,
                     )
                     count += 1
                 except Exception as e:
-                    self.stdout.write(self.style.ERROR(f'Failed to process geometry for {name}: {e}'))
+                    self.stdout.write(self.style.ERROR(f'Failed to process geometry for {adm2_name or adm1_name or iso_a2}: {e}'))
                     continue
                 
             self.stdout.write(self.style.SUCCESS(f'Imported {count} boundaries from {url}'))

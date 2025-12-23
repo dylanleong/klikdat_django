@@ -58,6 +58,8 @@ class Property(models.Model):
     
     features = models.JSONField(default=list, blank=True, help_text="List of feature strings")
     
+    floor_plan = models.ImageField(upload_to='property_floorplans/', null=True, blank=True)
+    
     status = models.CharField(max_length=20, choices=Status.choices, default=Status.AVAILABLE)
     
     created_at = models.DateTimeField(auto_now_add=True)

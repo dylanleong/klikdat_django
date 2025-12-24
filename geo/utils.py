@@ -596,13 +596,31 @@ class GeoKlikDecoder:
             from geo.models import CountryInfo
             country = CountryInfo.objects.filter(country_code=iso_a2).first()
             c_name = country.country_name if country else iso_a2
-            
+
+            # Try to find specific boundary geometry
+            geometry = None
+            wb_boundary = None
+            if not region_prefix:
+                 # Country level - Admin 0
+                 from geo.models import WorldBankBoundary
+                 wb_boundary = WorldBankBoundary.objects.filter(level="Admin 0", iso_a2=iso_a2).first()
+            elif gk_regions.count() == 1:
+                 # Single Region found - Admin 1
+                 target_region = gk_regions.first()
+                 from geo.models import WorldBankBoundary
+                 wb_boundary = WorldBankBoundary.objects.filter(level="Admin 1", adm1_code=target_region.adm1_code).first()
+
+            geometry_json = None
+            if wb_boundary and wb_boundary.geometry:
+                geometry_json = wb_boundary.geometry.json
+
             return {
                 'bbox': [y_min, x_min, y_max, x_max], 
                 'center': [(y_min + y_max)/2, (x_min + x_max)/2],
                 'country_name': c_name,
                 'region_name': region_prefix if region_prefix else "Entire Country",
-                'adm2_name': None
+                'adm2_name': None,
+                'geometry': geometry_json
             }
 
 def get_region_area(min_lat, max_lat, min_lon, max_lon):

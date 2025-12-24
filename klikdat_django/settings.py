@@ -134,7 +134,7 @@ DATABASE_HOST = os.getenv('DATABASE_HOST', '127.0.0.1')
 
 # If we are running locally (outside Docker) but DATABASE_HOST is set to 'db',
 # we should try to connect to localhost instead.
-if DATABASE_HOST == 'db':
+if DEBUG and DATABASE_HOST == 'db':
     import socket
     try:
         # Check if 'db' is resolvable (it only is inside the Docker network)

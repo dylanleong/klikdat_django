@@ -27,22 +27,31 @@ class ImportTaskAdmin(admin.ModelAdmin):
 
     def import_dashboard(self, request):
         # Get all management commands from the 'geo' app
+        # Get all management commands from relevant apps
         all_commands = get_commands()
-        geo_commands = []
+        import_commands = []
+        target_apps = ['geo', 'vehicles']
+        
         for cmd_name, app_name in all_commands.items():
-            if app_name == 'geo':
+            if app_name in target_apps:
                 from django.core.management import load_command_class
                 cmd_class = load_command_class(app_name, cmd_name)
-                geo_commands.append({
-                    'name': cmd_name,
-                    'help': getattr(cmd_class, 'help', 'No description available'),
-                })
+                # Only include commands that look like import/ingestion scripts
+                if 'import' in cmd_name or 'ingest' in cmd_name or 'migrate' in cmd_name or 'calculate' in cmd_name:
+                     import_commands.append({
+                        'name': cmd_name,
+                        'app': app_name,
+                        'help': getattr(cmd_class, 'help', 'No description available'),
+                    })
+        
+        # Sort by app then name
+        import_commands.sort(key=lambda x: (x['app'], x['name']))
 
         context = {
             **self.admin_site.each_context(request),
-            'commands': geo_commands,
+            'commands': import_commands,
             'recent_tasks': ImportTask.objects.all()[:10],
-            'title': 'Import Dashboard',
+            'title': 'Global Import Dashboard',
         }
         return render(request, 'admin/geo/import_dashboard.html', context)
 

@@ -33,16 +33,20 @@ print("Database connection failed after {} retries".format(max_retries))
 sys.exit(1)
 END
 
-if [ "$DJANGO_DEBUG" = "True" ]; then
-    echo "Running makemigrations..."
-    python manage.py makemigrations
+if [ "$#" -gt 0 ]; then
+    exec "$@"
+else
+    if [ "$DJANGO_DEBUG" = "True" ]; then
+        echo "Running makemigrations..."
+        python manage.py makemigrations
+    fi
+
+    echo "Running migrate..."
+    python manage.py migrate
+
+    echo "Collecting static files..."
+    echo yes | python manage.py collectstatic
+
+    echo "Starting Daphne..."
+    daphne -b 0.0.0.0 -p 8000 klikdat_django.asgi:application
 fi
-
-echo "Running migrate..."
-python manage.py migrate
-
-echo "Collecting static files..."
-echo yes | python manage.py collectstatic
-
-echo "Starting Daphne..."
-daphne -b 0.0.0.0 -p 8000 klikdat_django.asgi:application

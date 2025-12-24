@@ -30,7 +30,7 @@ services:
 
   qcluster:
     build: .
-    command: python manage.py qcluster
+    command: ./entrypoint.sh python manage.py qcluster
     volumes:
       - .:/app
     env_file:

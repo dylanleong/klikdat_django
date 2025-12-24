@@ -17,5 +17,13 @@ services:
   redis:
     restart: always
 
+  qcluster:
+    restart: always
+    command: ./entrypoint.sh python manage.py qcluster
+    env_file:
+      - .env.prod
+    volumes:
+      - ./data:/app/data
+
 volumes:
   media_volume:

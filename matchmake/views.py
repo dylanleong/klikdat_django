@@ -21,6 +21,12 @@ class MatchmakeProfileViewSet(viewsets.ModelViewSet):
     def get_queryset(self):
         return MatchmakeProfile.objects.filter(user=self.request.user)
 
+    def list(self, request, *args, **kwargs):
+        # Ensure profile exists for the current user
+        if request.user.is_authenticated:
+            MatchmakeProfile.objects.get_or_create(user=request.user)
+        return super().list(request, *args, **kwargs)
+
     def perform_create(self, serializer):
         serializer.save(user=self.request.user)
 

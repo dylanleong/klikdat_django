@@ -1,21 +1,22 @@
 {% extends "admin/base_site.html" %}
 {% load i18n static %}
 
-{% block extrastyle %}{{ block.super }}<link rel="stylesheet" type="text/css" href="{% static "admin/css/forms.css" %}">{% endblock %}
+{% block extrastyle %}{{ block.super }}
+<link rel="stylesheet" type="text/css" href="{% static " admin/css/forms.css" %}">{% endblock %}
 
 {% block breadcrumbs %}
 <div class="breadcrumbs">
-<a href="{% url 'admin:index' %}">{% trans 'Home' %}</a>
-&rsaquo; <a href="{% url 'admin:app_list' app_label='geo' %}">Geo</a>
-&rsaquo; <a href="{% url 'admin:geo_importtask_changelist' %}">Import Tasks</a>
-&rsaquo; Import Dashboard
+    <a href="{% url 'admin:index' %}">{% trans 'Home' %}</a>
+    &rsaquo; <a href="{% url 'admin:app_list' app_label='geo' %}">Geo</a>
+    &rsaquo; <a href="{% url 'admin:geo_importtask_changelist' %}">Import Tasks</a>
+    &rsaquo; Import Dashboard
 </div>
 {% endblock %}
 
 {% block content %}
 <div id="content-main">
     <h1>Data Import Dashboard</h1>
-    
+
     <div class="module">
         <h2>Available Import Commands</h2>
         <table style="width: 100%;">
@@ -30,20 +31,94 @@
             <tbody>
                 {% for cmd in commands %}
                 <tr>
-                    <td><span style="text-transform: uppercase; font-size: 0.8em; font-weight: bold; padding: 2px 6px; border-radius: 4px; background: #eee;">{{ cmd.app }}</span></td>
+                    <td><span
+                            style="text-transform: uppercase; font-size: 0.8em; font-weight: bold; padding: 2px 6px; border-radius: 4px; background: #eee;">{{
+                            cmd.app }}</span></td>
                     <td><strong>{{ cmd.name }}</strong></td>
                     <td>{{ cmd.help }}</td>
                     <td>
                         <form action="{% url 'admin:geo_import_trigger' %}" method="post">
                             {% csrf_token %}
                             <input type="hidden" name="command" value="{{ cmd.name }}">
-                            <input type="submit" value="Run Import" class="default" onclick="return confirm('Are you sure you want to run {{ cmd.name }}?');">
+                            <input type="submit" value="Run Import" class="default"
+                                onclick="return confirm('Are you sure you want to run {{ cmd.name }}?');">
                         </form>
                     </td>
                 </tr>
                 {% endfor %}
             </tbody>
         </table>
+    </div>
+
+    <!-- Geocoding Comparison Playground -->
+    <div class="module">
+        <h2>Geocoding Playground (GeoKlik Hilbert)</h2>
+        <div style="padding: 10px;">
+            <div style="display: flex; gap: 10px; margin-bottom: 10px;">
+                <input type="text" id="geo-lat" placeholder="Latitude (e.g. 40.7128)"
+                    style="padding: 5px; width: 150px;">
+                <input type="text" id="geo-lon" placeholder="Longitude (e.g. -74.0060)"
+                    style="padding: 5px; width: 150px;">
+                <button onclick="compareGeocoding()" class="button default">Compare</button>
+            </div>
+
+            <table style="width: 100%; border-collapse: collapse;">
+                <thead>
+                    <tr>
+                        <th style="text-align: left; border-bottom: 2px solid #ddd; padding: 5px;">Type</th>
+                        <th style="text-align: left; border-bottom: 2px solid #ddd; padding: 5px;">ID</th>
+                        <th style="text-align: left; border-bottom: 2px solid #ddd; padding: 5px;">Notes</th>
+                    </tr>
+                </thead>
+                <tbody id="comparison-results">
+                    <tr>
+                        <td colspan="3" style="padding: 10px; color: #666;">Enter coordinates to see comparison...</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+
+        <script>
+            async function compareGeocoding() {
+                const lat = document.getElementById('geo-lat').value;
+                const lon = document.getElementById('geo-lon').value;
+                const tbody = document.getElementById('comparison-results');
+
+                if (!lat || !lon) {
+                    alert("Please enter both Latitude and Longitude");
+                    return;
+                }
+
+                tbody.innerHTML = '<tr><td colspan="3" style="padding: 10px;">Loading...</td></tr>';
+
+                try {
+                    const response = await fetch(`/api/geo/encode/?lat=${lat}&lon=${lon}`);
+                    const data = await response.json();
+
+                    if (data.error) {
+                        tbody.innerHTML = `<tr><td colspan="3" style="padding: 10px; color: red;">Error: ${data.error}</td></tr>`;
+                        return;
+                    }
+
+                    tbody.innerHTML = `
+                        <tr>
+                            <td style="padding: 8px; font-weight: bold;">GeoKlik (Hilbert)</td>
+                            <td style="padding: 8px; font-family: monospace; font-size: 1.22em; color: #2c3e50;">${data.geoklik_id}</td>
+                            <td style="padding: 8px;">Hilbert Curve encoding. Provides superior spatial locality and unified resolution.</td>
+                        </tr>
+                        <tr>
+                            <td colspan="3" style="padding: 8px; border-top: 1px solid #eee; font-size: 0.9em;">
+                                <strong>Location:</strong> ${data.country_name} > ${data.region_name} > ${data.adm2_name || 'N/A'}
+                            </td>
+                        </tr>
+                    `;
+
+                } catch (e) {
+                    console.error(e);
+                    tbody.innerHTML = `<tr><td colspan="3" style="padding: 10px; color: red;">Request Failed: ${e}</td></tr>`;
+                }
+            }
+        </script>
     </div>
 
     <div class="module">
@@ -63,7 +138,8 @@
                 <tr>
                     <td>{{ task.command_name }}</td>
                     <td>
-                        <span class="status-{{ task.status|lower }}" style="font-weight: bold; color: {% if task.status == 'COMPLETED' %}green{% elif task.status == 'FAILED' %}red{% elif task.status == 'RUNNING' %}blue{% else %}orange{% endif %};">
+                        <span class="status-{{ task.status|lower }}"
+                            style="font-weight: bold; color: {% if task.status == 'COMPLETED' %}green{% elif task.status == 'FAILED' %}red{% elif task.status == 'RUNNING' %}blue{% else %}orange{% endif %};">
                             {{ task.status }}
                         </span>
                     </td>

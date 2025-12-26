@@ -1,52 +1,32 @@
 import math
 
-class MortonCoder:
+class CoordinateTransformer:
     """
-    Logic for Z-order interleaving.
-    Maps normalized coordinates (0.0 to 1.0) to interleaved bit strings.
+    Utilities for mapping geographic coordinates to normalized integer spaces.
     """
-    @staticmethod
-    def interleave(x_bits, y_bits, x_count, y_count):
-        """Interleave bits of two integers."""
-        interleaved = 0
-        for i in range(max(x_count, y_count)):
-            if i < x_count:
-                interleaved |= ((x_bits >> i) & 1) << (2 * i)
-            if i < y_count:
-                interleaved |= ((y_bits >> i) & 1) << (2 * i + 1)
-        return interleaved
 
     @staticmethod
     def normalize_to_int(value, min_val, max_val, max_int):
-        """Map a float value in [min_val, max_val] to an integer in [0, max_int]."""
-        if value < min_val: value = min_val
-        if value > max_val: value = max_val
+        """Map a float value into [0, max_int] bins."""
+        num_bins = max_int + 1
+        if value <= min_val: return 0
+        if value >= max_val: return max_int
         
-        ratio = (value - min_val) / (max_val - min_val)
-        return int(ratio * max_int)
-
-    @staticmethod
-    def de_interleave(interleaved, x_count, y_count):
-        """De-interleave bits into two integers."""
-        x_bits = 0
-        y_bits = 0
-        for i in range(max(x_count, y_count)):
-            if i < x_count:
-                x_bits |= ((interleaved >> (2 * i)) & 1) << i
-            if i < y_count:
-                y_bits |= ((interleaved >> (2 * i + 1)) & 1) << i
-        return x_bits, y_bits
+        step = (max_val - min_val) / num_bins
+        return int((value - min_val) / step)
 
     @staticmethod
     def denormalize_from_int(val_int, min_val, max_val, max_int):
-        """Map an integer in [0, max_int] back to a center float in [min_val, max_val]."""
-        step = (max_val - min_val) / max_int
-        return min_val + (val_int * step) + (step / 2)
+        """Map an integer to the center float of the corresponding bin."""
+        num_bins = max_int + 1
+        step = (max_val - min_val) / num_bins
+        return min_val + (val_int + 0.5) * step
 
     @staticmethod
     def denormalize_to_bbox(val_int, min_val, max_val, max_int):
-        """Map an integer in [0, max_int] to a bounding box."""
-        step = (max_val - min_val) / max_int
+        """Map an integer bin index to its bounding box edges."""
+        num_bins = max_int + 1
+        step = (max_val - min_val) / num_bins
         b_min = min_val + (val_int * step)
         b_max = b_min + step
         return b_min, b_max
@@ -59,31 +39,33 @@ class GeoKlikEncoder:
 
     @classmethod
     def encode_standard(cls, interleaved_32):
-        """Pattern: AANN-AANN (4 alpha, 4 numeric)"""
-        # We need to split 32 bits into 4 groups for alpha (5 bits each? no, that's 20)
-        # Actually, let's just map the whole thing to the required slots.
-        # AANN-AANN means 4 Alpha, 4 Numeric.
-        # Alpha slots: 26 chars. Numeric: 10 chars.
-        # Total capacity: 26*26*10*10 * 26*26*10*10 = (26^2 * 10^2)^2 = 67600^2 = 4,569,760,000
-        # 32 bits is ~4.29 billion. This fits perfectly.
-        
+        """
+        Pattern: AANN-AANN (4 alpha, 4 numeric)
+        Method: Bitwise Split Quadtree
+        Total Bits: 32 (16X, 16Y)
+        Split: High 16 bits, Low 16 bits.
+        """
         val = interleaved_32
         
-        # Split into two 16-bit chunks (AANN and AANN)
-        chunk2 = val % 67600
-        chunk1 = val // 67600
+        # Split at bit 16
+        chunk1 = val >> 16
+        chunk2 = val & 0xFFFF
         
         return f"{cls._to_aann(chunk1)}-{cls._to_aann(chunk2)}"
 
     @classmethod
-    def encode_giant(cls, interleaved_35):
-        """Pattern: AAAN-AAAN (6 alpha, 2 numeric)"""
-        # Capacity: (26^3 * 10)^2 = (17576 * 10)^2 = 175760^2 = 30,891,577,600
-        # 35 bits is ~34.35 billion. This fits too!
+    def encode_giant(cls, interleaved_34):
+        """
+        Pattern: AAAN-AAAN (6 alpha, 2 numeric)
+        Method: Bitwise Split Quadtree
+        Total Bits: 34 (17X, 17Y)
+        Split: High 17 bits, Low 17 bits.
+        """
+        val = interleaved_34
         
-        val = interleaved_35
-        chunk2 = val % 175760
-        chunk1 = val // 175760
+        # Split at bit 17
+        chunk1 = val >> 17
+        chunk2 = val & 0x1FFFF
         
         return f"{cls._to_aaan(chunk1)}-{cls._to_aaan(chunk2)}"
 
@@ -122,7 +104,44 @@ class GeoKlikEncoder:
         val = 0
         for char in s:
             val = val * 26 + (ord(char) - 65)
-        return val
+
+class HilbertCoder:
+    @staticmethod
+    def rot(n, x, y, rx, ry):
+        if ry == 0:
+            if rx == 1:
+                x = n - 1 - x
+                y = n - 1 - y
+            return y, x
+        return x, y
+
+    @classmethod
+    def xy2d(cls, n, x, y):
+        d = 0
+        s = n // 2
+        while s > 0:
+            rx = 1 if (x & s) > 0 else 0
+            ry = 1 if (y & s) > 0 else 0
+            d += s * s * ((3 * rx) ^ ry)
+            x, y = cls.rot(s, x, y, rx, ry)
+            s //= 2
+        return d
+
+    @classmethod
+    def d2xy(cls, n, d):
+        x = y = 0
+        s = 1
+        t = d
+        while s < n:
+            rx = 1 & (t // 2)
+            ry = 1 & (t ^ rx)
+            x, y = cls.rot(s, x, y, rx, ry)
+            x += s * rx
+            y += s * ry
+            t //= 4
+            s *= 2
+        return x, y
+
 
 class GeoKlikService:
     """
@@ -155,15 +174,15 @@ class GeoKlikService:
                 # 50m resolution target.
                 # 4 chars Base26 = 456,976 values.
                 
-                coder = MortonCoder()
-                # Use normalize_to_int directly for each axis
-                x_norm = coder.normalize_to_int(lon, gk_region.min_lon, gk_region.max_lon, 456975)
-                y_norm = coder.normalize_to_int(lat, gk_region.min_lat, gk_region.max_lat, 456975)
+                # Ocean Encoding: OO-RR-AAAN-AAAN (Hilbert 34-bit)
+                # Unifying Ocean with standard Hilbert curve logic.
+                n_val = 1 << 17
+                x_int = CoordinateTransformer.normalize_to_int(lon, gk_region.min_lon, gk_region.max_lon, 131071)
+                y_int = CoordinateTransformer.normalize_to_int(lat, gk_region.min_lat, gk_region.max_lat, 131071)
+                d_val = HilbertCoder.xy2d(n_val, x_int, y_int)
+                geodata = GeoKlikEncoder.encode_giant(d_val)
                 
-                lat_code = GeoKlikEncoder._to_base26(y_norm, 4)
-                lon_code = GeoKlikEncoder._to_base26(x_norm, 4)
-                
-                id_str = f"{gk_region.iso_a2}-{gk_region.adm1_code}-{lat_code}-{lon_code}"
+                id_str = f"{gk_region.iso_a2}-{gk_region.adm1_code}-{geodata}"
                 
                 ocean_names = {
                     "PE": "Pacific Ocean (East)",
@@ -209,21 +228,19 @@ class GeoKlikService:
             }
 
         # 4. Geocoding Math
-        coder = MortonCoder()
-        if gk_region.is_giant:
-            # 35-bit Pattern (6 Alpha, 2 Numeric)
-            # x_bits (17), y_bits (18) = 35 bits
-            x_int = coder.normalize_to_int(lon, gk_region.min_lon, gk_region.max_lon, 131071)
-            y_int = coder.normalize_to_int(lat, gk_region.min_lat, gk_region.max_lat, 262143)
-            interleaved = coder.interleave(x_int, y_int, 17, 18)
-            geodata = GeoKlikEncoder.encode_giant(interleaved)
+            # 34-bit Hilbert (17 bits per dimension)
+            n_val = 1 << 17
+            x_int = CoordinateTransformer.normalize_to_int(lon, gk_region.min_lon, gk_region.max_lon, 131071)
+            y_int = CoordinateTransformer.normalize_to_int(lat, gk_region.min_lat, gk_region.max_lat, 131071)
+            d_val = HilbertCoder.xy2d(n_val, x_int, y_int)
+            geodata = GeoKlikEncoder.encode_giant(d_val)
         else:
-            # 32-bit Pattern (4 Alpha, 4 Numeric)
-            # x_bits (16), y_bits (16) = 32 bits
-            x_int = coder.normalize_to_int(lon, gk_region.min_lon, gk_region.max_lon, 65535)
-            y_int = coder.normalize_to_int(lat, gk_region.min_lat, gk_region.max_lat, 65535)
-            interleaved = coder.interleave(x_int, y_int, 16, 16)
-            geodata = GeoKlikEncoder.encode_standard(interleaved)
+            # 32-bit Hilbert (16 bits per dimension)
+            n_val = 1 << 16
+            x_int = CoordinateTransformer.normalize_to_int(lon, gk_region.min_lon, gk_region.max_lon, 65535)
+            y_int = CoordinateTransformer.normalize_to_int(lat, gk_region.min_lat, gk_region.max_lat, 65535)
+            d_val = HilbertCoder.xy2d(n_val, x_int, y_int)
+            geodata = GeoKlikEncoder.encode_standard(d_val)
 
         # 5. Get Metadata
         # Try to find specific Admin 2 boundary for city/district name
@@ -240,7 +257,7 @@ class GeoKlikService:
         country_name = country.country_name if country else gk_region.iso_a2
 
         id_str = f"{gk_region.iso_a2}-{region_code}-{geodata}"
-        
+
         return {
             "geoklik_id": id_str,
             "country_name": country_name,
@@ -255,19 +272,12 @@ class GeoKlikService:
         parts = geoklik_id.split('-')
         if len(parts) < 3: return None
         
-        parts = geoklik_id.split('-')
-        if len(parts) < 3: return None
-        
-        iso_a2 = parts[0]
-        
+        iso_a2 = parts[0].upper()
         if iso_a2 == 'OO':
-            # Ocean Decoding
-            # Format: OO-RR-AAAA-AAAA
-            if len(parts) != 4: return None
-            
+            # Unified Ocean Decoding (Hilbert 34-bit)
+            # Format: OO-RR-AAAN-AAAN
+            if len(parts) < 4: return None
             region_code = parts[1]
-            lat_code_str = parts[2]
-            lon_code_str = parts[3]
             
             # Find Region by Code
             gk_region = GeoKlikRegion.objects.filter(
@@ -275,16 +285,21 @@ class GeoKlikService:
                 iso_a2='OO',
                 adm1_code=region_code
             ).first()
-            
             if not gk_region: return None
+
+            geodata = geoklik_id.split('-', 2)[2] # Get everything after OO-RR
+            parts_geo = geodata.split('-')
             
-            coder = MortonCoder()
+            decoder = GeoKlikDecoder()
+            v1 = decoder._from_aaan(parts_geo[0])
+            v2 = decoder._from_aaan(parts_geo[1])
+            d_val = (v1 << 17) | v2
             
-            y_val = GeoKlikEncoder._from_base26(lat_code_str)
-            x_val = GeoKlikEncoder._from_base26(lon_code_str)
+            n_val = 1 << 17
+            x_int, y_int = HilbertCoder.d2xy(n_val, d_val)
             
-            y_min, y_max = coder.denormalize_to_bbox(y_val, gk_region.min_lat, gk_region.max_lat, 456975)
-            x_min, x_max = coder.denormalize_to_bbox(x_val, gk_region.min_lon, gk_region.max_lon, 456975)
+            x_min, x_max = CoordinateTransformer.denormalize_to_bbox(x_int, gk_region.min_lon, gk_region.max_lon, 131071)
+            y_min, y_max = CoordinateTransformer.denormalize_to_bbox(y_int, gk_region.min_lat, gk_region.max_lat, 131071)
             
             center_lat = (y_min + y_max)/2
             center_lon = (x_min + x_max)/2
@@ -295,16 +310,7 @@ class GeoKlikService:
                 'iso_a2': iso_a2,
                 'region_code': region_code,
                 'country_name': "International Waters", 
-                'region_name': gk_region.iso_a2, # Wait, store nice name? 
-                # Model doesn't have name logic easily accessible except construction str.
-                # Migration stored 'name' but model doesn't have 'name' field?
-                # Ah, Migration 0012: I passed 'name' to the list, but model GeoKlikRegion doesn't have 'name'!
-                # I should just use "Pacific Ocean" hardcoded or derived.
-                # Actually, I can use the migration list logic or just return code for now.
-                # Wait, I checked models.py earlier. GeoKlikRegion only has iso_a2, adm1_code.
-                # So I can't retrieve "Pacific Ocean (East)" string unless I query WorldBankBoundary?
-                # But oceans don't have WB boundary.
-                # I'll just return "Ocean" or derive from code map.
+                'region_name': gk_region.iso_a2,
                 'adm2_name': "Ocean",
                 'bbox': [y_min, x_min, y_max, x_max],
                 'center': [center_lat, center_lon]
@@ -327,30 +333,35 @@ class GeoKlikService:
         
         if not gk_region: return None
 
-        coder = MortonCoder()
         decoder = GeoKlikDecoder()
         
         if gk_region.is_giant:
-            # Giant: AAAN-AAAN (6 Alpha, 2 Numeric) 35 bits (17x, 18y)
-            if len(geodata) < 2: return None
-            v1 = decoder._from_aaan(geodata[0])
-            v2 = decoder._from_aaan(geodata[1])
-            interleaved = (v1 * 175760) + v2
+            # Giant: AAAN-AAAN (6 Alpha, 2 Numeric) 34 bits (17x, 17y)
+            geodata_str = "".join(geodata).replace("-", "")
+            if len(geodata_str) < 8: return None
             
-            # De-interleave 35 bits (17x, 18y)
-            x_int, y_int = coder.de_interleave(interleaved, 17, 18)
+            v1 = decoder._from_aaan(geodata_str[:4])
+            v2 = decoder._from_aaan(geodata_str[4:8])
+            d_val = (v1 << 17) | v2
             
-            x_min, x_max = coder.denormalize_to_bbox(x_int, gk_region.min_lon, gk_region.max_lon, 131071)
-            y_min, y_max = coder.denormalize_to_bbox(y_int, gk_region.min_lat, gk_region.max_lat, 262143)
+            n_val = 1 << 17
+            x_int, y_int = HilbertCoder.d2xy(n_val, d_val)
+            
+            x_min, x_max = CoordinateTransformer.denormalize_to_bbox(x_int, gk_region.min_lon, gk_region.max_lon, 131071)
+            y_min, y_max = CoordinateTransformer.denormalize_to_bbox(y_int, gk_region.min_lat, gk_region.max_lat, 131071)
         else:
             # Standard: AANN-AANN (4 Alpha, 4 Numeric) 32 bits (16x, 16y)
-            if len(geodata) < 2: return None
-            v1 = decoder._from_aann(geodata[0])
-            v2 = decoder._from_aann(geodata[1])
-            interleaved = (v1 * 67600) + v2
-            x_int, y_int = coder.de_interleave(interleaved, 16, 16)
-            x_min, x_max = coder.denormalize_to_bbox(x_int, gk_region.min_lon, gk_region.max_lon, 65535)
-            y_min, y_max = coder.denormalize_to_bbox(y_int, gk_region.min_lat, gk_region.max_lat, 65535)
+            geodata_str = "".join(geodata).replace("-", "")
+            if len(geodata_str) < 8: return None
+            
+            v1 = decoder._from_aann(geodata_str[:4])
+            v2 = decoder._from_aann(geodata_str[4:8])
+            d_val = (v1 << 16) | v2
+            
+            n_val = 1 << 16
+            x_int, y_int = HilbertCoder.d2xy(n_val, d_val)
+            x_min, x_max = CoordinateTransformer.denormalize_to_bbox(x_int, gk_region.min_lon, gk_region.max_lon, 65535)
+            y_min, y_max = CoordinateTransformer.denormalize_to_bbox(y_int, gk_region.min_lat, gk_region.max_lat, 65535)
 
         center_lat = (y_min + y_max)/2
         center_lon = (x_min + x_max)/2
@@ -393,10 +404,14 @@ class GeoKlikService:
         clean_id = geoklik_id.replace(" ", "").upper()
         parts = [p for p in clean_id.split('-') if p]
         
-        # If it looks like a full ID
-        if len(parts) >= 4 or (len(parts) == 3 and len(parts[2]) >= 8):
+        # Route based on geodata length
+        geodata_str = "".join(parts[2:]).replace("-", "") if len(parts) > 2 else ""
+        
+        if len(geodata_str) >= 8:
+            # Full ID (at least 8 chars of geodata)
             return cls.decode(clean_id, epoch_name)
         else:
+            # Partial ID
             return GeoKlikDecoder.decode_partial(clean_id, epoch_name)
 
     @staticmethod
@@ -408,28 +423,138 @@ class GeoKlikService:
             chars.append(chr(65 + rem))
         return "".join(reversed(chars))
 
-    @staticmethod
-    def _from_base26(s):
-        """Convert Base26 alpha string to integer."""
-        val = 0
-        for char in s:
-            val = val * 26 + (ord(char) - 65)
-        return val
+    @classmethod
+    def get_subgrid(cls, geoklik_id, epoch_name="2025.1"):
+        """
+        Returns the next level of hierarchical sub-regions for a given prefix.
+        """
+        from geo.models import GeoKlikRegion, WorldBankRegionMapping
+        clean_id = geoklik_id.replace(" ", "").upper()
+        parts = [p for p in clean_id.split('-') if p]
+        
+        if len(parts) == 0: return []
+        
+        iso_a2 = parts[0]
+        
+        # Level 1: ISO -> ADM1 Regions (ISO-RG)
+        if len(parts) == 1:
+            regions = GeoKlikRegion.objects.filter(
+                iso_a2=iso_a2, 
+                epoch__name=epoch_name
+            )
+            mappings = {
+                m.wb_adm1_code: m.wb_region_code 
+                for m in WorldBankRegionMapping.objects.filter(country_code=iso_a2)
+            }
+            data = []
+            for r in regions:
+                 code = mappings.get(r.adm1_code, "XX")
+                 data.append({
+                     'id': f"{r.iso_a2}-{code}",
+                     'label': code,
+                     'bbox': [r.min_lat, r.min_lon, r.max_lat, r.max_lon]
+                 })
+            return data
 
-    @staticmethod
-    def _to_base26(val, length=4):
-        chars = []
-        for _ in range(length):
-            val, rem = divmod(val, 26)
-            chars.append(chr(65 + rem))
-        return "".join(reversed(chars))
+        # Level 2+: Drill down into Hilbert grid
+        region_code = parts[1]
+        geodata_prefix = "".join(parts[2:]).replace("-", "")
+        
+        mapping = WorldBankRegionMapping.objects.filter(
+            country_code=iso_a2,
+            wb_region_code=region_code
+        ).first()
+        if not mapping: return []
+        
+        gk_region = GeoKlikRegion.objects.filter(
+            epoch__name=epoch_name,
+            adm1_code=mapping.wb_adm1_code
+        ).first()
+        if not gk_region: return []
 
-    @staticmethod
-    def _from_base26(s):
-        val = 0
-        for char in s:
-            val = val * 26 + (ord(char) - 65)
-        return val
+        shift = 17 if gk_region.is_giant else 16
+        n_full = 1 << shift
+        pattern = 'giant' if gk_region.is_giant else 'standard'
+        
+        # Determine current depth and next chars
+        depth = len(geodata_prefix)
+        if depth >= 8: return [] # Already at full resolution
+        
+        # Segment 3 hierarchy: chars 0-3
+        # Segment 4 hierarchy: chars 4-7
+        current_segment = geodata_prefix[:4] if depth < 4 else geodata_prefix[4:]
+        segment_depth = len(current_segment)
+        
+        # Giant (AAAN): 26, 26, 26, 10
+        # Standard (AANN): 26, 26, 10, 10
+        if pattern == 'giant':
+            is_alpha = [True, True, True, False]
+            bases = [26, 26, 26, 10]
+        else:
+            is_alpha = [True, True, False, False]
+            bases = [26, 26, 10, 10]
+
+        char_set = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ"
+        next_chars = []
+        if is_alpha[segment_depth]:
+            next_chars = [char_set[10 + i] for i in range(26)]
+        else:
+            next_chars = [str(i) for i in range(10)]
+
+
+        data = []
+        decoder = GeoKlikDecoder()
+        
+        # If we are drilling into the first segment (chars 0-3)
+        if depth < 4:
+            for char in next_chars:
+                test_prefix = geodata_prefix + char
+                h_min, h_max = decoder._decode_mixed_range(test_prefix, pattern)
+                
+                x1, x2, y1, y2 = GeoKlikDecoder._scan_curve_range_bbox(
+                    h_min << shift, (h_max << shift) + ((1 << shift) - 1), n_full
+                )
+                
+                max_code = 131071 if gk_region.is_giant else 65535
+                ln_min, _ = CoordinateTransformer.denormalize_to_bbox(x1, gk_region.min_lon, gk_region.max_lon, max_code)
+                _, ln_max = CoordinateTransformer.denormalize_to_bbox(x2, gk_region.min_lon, gk_region.max_lon, max_code)
+                lt_min, _ = CoordinateTransformer.denormalize_to_bbox(y1, gk_region.min_lat, gk_region.max_lat, max_code)
+                _, lt_max = CoordinateTransformer.denormalize_to_bbox(y2, gk_region.min_lat, gk_region.max_lat, max_code)
+
+                data.append({
+                    'id': f"{iso_a2}-{region_code}-{test_prefix}",
+                    'label': test_prefix,
+                    'bbox': [lt_min, ln_min, lt_max, ln_max]
+                })
+        else:
+            # Drilling into second segment (Low Chunks)
+            h_val = decoder._from_aaan(geodata_prefix[:4]) if pattern == 'giant' else decoder._from_aann(geodata_prefix[:4])
+            offset = h_val << shift
+            
+            for char in next_chars:
+                test_suffix = current_segment + char
+                l_min, l_max = decoder._decode_mixed_range(test_suffix, pattern)
+                
+                x1, x2, y1, y2 = GeoKlikDecoder._scan_curve_range_bbox(
+                    offset + l_min, offset + l_max, n_full
+                )
+                
+                max_code = 131071 if gk_region.is_giant else 65535
+                ln_min, _ = CoordinateTransformer.denormalize_to_bbox(x1, gk_region.min_lon, gk_region.max_lon, max_code)
+                _, ln_max = CoordinateTransformer.denormalize_to_bbox(x2, gk_region.min_lon, gk_region.max_lon, max_code)
+                lt_min, _ = CoordinateTransformer.denormalize_to_bbox(y1, gk_region.min_lat, gk_region.max_lat, max_code)
+                _, lt_max = CoordinateTransformer.denormalize_to_bbox(y2, gk_region.min_lat, gk_region.max_lat, max_code)
+
+                full_id = f"{iso_a2}-{region_code}-{geodata_prefix[:4]}-{test_suffix}"
+                data.append({
+                    'id': full_id,
+                    'label': test_suffix,
+                    'bbox': [lt_min, ln_min, lt_max, ln_max]
+                })
+        
+        return data
+
+
 
 class GeoKlikDecoder:
     """
@@ -454,6 +579,113 @@ class GeoKlikDecoder:
         a3 = cls.CHAR_SET.find(s[2]) - 10
         n1 = int(s[3])
         return (a1 * 26 * 26 * 10) + (a2 * 26 * 10) + (a3 * 10) + n1
+
+    @classmethod
+    def _decode_mixed_range(cls, partial_s, pattern_type):
+        """
+        Given a partial string (e.g. "G", "GW", "GW9"), returns the (min, max) integer
+        range that this prefix covers in the full chunk space.
+        pattern_type: 'standard' (AANN) or 'giant' (AAAN)
+        """
+        if pattern_type == 'giant':
+            # AAAN: 26, 26, 26, 10
+            bases = [26, 26, 26, 10]
+            mults = [6760, 260, 10, 1]
+            is_alpha = [True, True, True, False]
+        else:
+            # AANN: 26, 26, 10, 10
+            bases = [26, 26, 10, 10]
+            mults = [2600, 100, 10, 1]
+            is_alpha = [True, True, False, False]
+            
+        val_min = 0; val_max = 0
+        common_val = 0
+        
+        # 1. Base value from provided chars
+        for i, char in enumerate(partial_s):
+            if i >= 4: break
+            c_idx = cls.CHAR_SET.find(char)
+            digit_val = (c_idx - 10) if is_alpha[i] else int(char)
+            common_val += digit_val * mults[i]
+            
+        val_min = common_val
+        val_max = common_val
+        
+        # 2. Add range for missing suffixes
+        for i in range(len(partial_s), 4):
+            val_max += (bases[i] - 1) * mults[i]
+            
+        return val_min, val_max
+
+    @classmethod
+    def _get_aligned_hilbert_mbr(cls, d_val, b_shift, n_full):
+        """
+        Returns the MBR of an aligned Hilbert block of size 2^b_shift.
+        For aligned Hilbert indices, this corresponds to a square (even shift)
+        or a rectangle (odd shift).
+        """
+        # We find a point in the block
+        x, y = HilbertCoder.d2xy(n_full, d_val << b_shift)
+        
+        # For a block of size 2^b, the coordinates are aligned to power-of-2 bounds.
+        # Standard split: bits_total=32, b=16. x_bits=8, y_bits=8.
+        # Giant split: bits_total=34, b=17. x_bits=9, y_bits=8 (or vice versa).
+        
+        # Rule: X gets more bits if b is odd in this implementation.
+        # b=1 maps to rx=bit 1, ry=bit 0... so bits 0,1 are quadrant 1.
+        # Bits 0..b-1 are consumed.
+        x_bits = (b_shift + 1) // 2
+        y_bits = b_shift // 2
+        
+        x_min = (x >> x_bits) << x_bits
+        y_min = (y >> y_bits) << y_bits
+        return x_min, x_min + (1 << x_bits) - 1, y_min, y_min + (1 << y_bits) - 1
+
+    @classmethod
+    def _scan_curve_range_bbox(cls, v_min, v_max, n):
+        """
+        Iteratively scans the Hilbert Curve range [v_min, v_max] to find the
+        True Minimum Bounding Rectangle (MBR).
+        """
+        v_limit = n * n - 1
+        v_min = min(v_min, v_limit)
+        v_max = min(v_max, v_limit)
+        
+        if v_min > v_max:
+             return 0, 0, 0, 0
+             
+        min_x, max_x = float('inf'), float('-inf')
+        min_y, max_y = float('inf'), float('-inf')
+        
+        count = v_max - v_min + 1
+        
+        if count > 10000:
+             step = count // 100
+             for val in range(v_min, v_max + 1, step):
+                 x, y = HilbertCoder.d2xy(n, val)
+                 if x < min_x: min_x = x
+                 if x > max_x: max_x = x
+                 if y < min_y: min_y = y
+                 if y > max_y: max_y = y
+             for val in [v_min, v_max]:
+                 x, y = HilbertCoder.d2xy(n, val)
+                 if x < min_x: min_x = x
+                 if x > max_x: max_x = x
+                 if y < min_y: min_y = y
+                 if y > max_y: max_y = y
+             return min_x, max_x, min_y, max_y
+
+        for val in range(v_min, v_max + 1):
+            x, y = HilbertCoder.d2xy(n, val)
+            if x < min_x: min_x = x
+            if x > max_x: max_x = x
+            if y < min_y: min_y = y
+            if y > max_y: max_y = y
+            
+        if min_x == float('inf'):
+             return 0, 0, 0, 0
+
+        return min_x, max_x, min_y, max_y
 
     @classmethod
     def decode_partial(cls, geoklik_id, epoch_name="2025.1"):
@@ -507,61 +739,64 @@ class GeoKlikDecoder:
         # Case: geodata partial search (narrowest)
         if geodata_str and gk_regions.count() == 1:
             gk_region = gk_regions.first()
-            coder = MortonCoder()
             
             # Aligned logic for base-26/10 segments
             # chunk1: a1*2600 + a2*100 + n1*10 + n2
             # Total val = chunk1 * 67600 + chunk2
-            if gk_region.is_giant:
-                v_min = 0; v_max = (1 << 35) - 1
-                prefix_val = 0
-                for i, char in enumerate(geodata_str[:8]):
-                    mult = 1
-                    for j in range(i + 1, 8): mult *= 26 if j % 4 < 3 else 10
-                    c_idx = cls.CHAR_SET.find(char)
-                    prefix_val += (c_idx - 10) * mult if i % 4 < 3 else int(char) * mult
-                v_min = prefix_val
-                range_size = 1
-                for j in range(len(geodata_str), 8): range_size *= 26 if j % 4 < 3 else 10
-                v_max = v_min + range_size - 1
-            else:
-                v_min = 0; range_size = (1 << 32)
-                v_max = v_min + range_size - 1
-                prefix_val = 0
-                for i, char in enumerate(geodata_str[:8]):
-                    mult = 1
-                    for j in range(i + 1, 8): mult *= 26 if j % 4 < 2 else 10
-                    c_idx = cls.CHAR_SET.find(char)
-                    prefix_val += (c_idx - 10) * mult if i % 4 < 2 else int(char) * mult
-                v_min = prefix_val
-                range_size = 1
-                for j in range(len(geodata_str), 8): range_size *= 26 if j % 4 < 2 else 10
-                v_max = v_min + range_size - 1
+            # Use helper to decode partial/full ranges for chunks
+            high_str = geodata_str[:4]
+            low_str = geodata_str[4:] if len(geodata_str) > 4 else ""
             
-            if gk_region.is_giant:
-                x1, y1 = coder.de_interleave(v_min, 17, 18)
-                x2, y2 = coder.de_interleave(v_max, 17, 18)
-                max_x = 131071; max_y = 262143
-                # Square scaling for giant (1:2 grid)
-                range_side_x = math.sqrt(range_size * 0.5)
-                range_side_y = range_side_x * 2
-            else:
-                x1, y1 = coder.de_interleave(v_min, 16, 16)
-                x2, y2 = coder.de_interleave(v_max, 16, 16)
-                max_x = 65535; max_y = 65535
-                range_side_x = math.sqrt(range_size)
-                range_side_y = range_side_x
+            pattern = 'giant' if gk_region.is_giant else 'standard'
+            shift = 17 if gk_region.is_giant else 16
+            
+            decoder = GeoKlikDecoder()
+            h_min, h_max = decoder._decode_mixed_range(high_str, pattern)
+            
+            x_min_int, x_max_int = 0, 0
+            n_full = 1 << shift
+            if len(high_str) < 4:
+                # We are scanning ranges of High Chunks.
+                # Each High Chunk is an aligned Hilbert block of size 2^shift.
+                vals_h = range(h_min, h_max + 1)
+                x_mins, y_mins, x_maxs, y_maxs = [], [], [], []
                 
-            x_avg = (x1 + x2) / 2
-            y_avg = (y1 + y2) / 2
-                
-            x_min, _ = coder.denormalize_to_bbox(x_avg - range_side_x/2, gk_region.min_lon, gk_region.max_lon, max_x)
-            y_min, _ = coder.denormalize_to_bbox(y_avg - range_side_y/2, gk_region.min_lat, gk_region.max_lat, max_y)
-            _, x_max = coder.denormalize_to_bbox(x_avg + range_side_x/2, gk_region.min_lon, gk_region.max_lon, max_x)
-            _, y_max = coder.denormalize_to_bbox(y_avg + range_side_y/2, gk_region.min_lat, gk_region.max_lat, max_y)
+                # Safety cap for tile iteration
+                display_vals = vals_h
+                max_iter = 500
+                if len(vals_h) > max_iter:
+                    step = len(vals_h) // max_iter
+                    display_vals = list(vals_h[::step]) + [vals_h[-1]]
 
-            center_lat = (y_min + y_max)/2
-            center_lon = (x_min + x_max)/2
+                for h in display_vals:
+                    x1, x2, y1, y2 = cls._get_aligned_hilbert_mbr(h, shift, n_full)
+                    x_mins.append(x1); x_maxs.append(x2)
+                    y_mins.append(y1); y_maxs.append(y2)
+                
+                x_min_int, x_max_int = min(x_mins), max(x_maxs)
+                y_min_int, y_max_int = min(y_mins), max(y_maxs)
+                
+            else:
+                # h_min is single value.
+                if low_str:
+                    l_min, l_max = decoder._decode_mixed_range(low_str, pattern)
+                    offset = (h_min << shift)
+                    x_min_int, x_max_int, y_min_int, y_max_int = cls._scan_curve_range_bbox(
+                        offset + l_min, offset + l_max, n_full
+                    )
+                else:
+                    # Full Tile for single h_min
+                    x_min_int, x_max_int, y_min_int, y_max_int = cls._get_aligned_hilbert_mbr(h_min, shift, n_full)
+
+            max_code = 131071 if gk_region.is_giant else 65535
+            
+            x_min, _ = CoordinateTransformer.denormalize_to_bbox(x_min_int, gk_region.min_lon, gk_region.max_lon, max_code)
+            _, x_max = CoordinateTransformer.denormalize_to_bbox(x_max_int, gk_region.min_lon, gk_region.max_lon, max_code)
+            y_min, _ = CoordinateTransformer.denormalize_to_bbox(y_min_int, gk_region.min_lat, gk_region.max_lat, max_code)
+            _, y_max = CoordinateTransformer.denormalize_to_bbox(y_max_int, gk_region.min_lat, gk_region.max_lat, max_code)
+
+            center_lat = (y_min+y_max)/2
+            center_lon = (x_min+x_max)/2
             
             # Metadata
             from geo.models import CountryInfo, WorldBankBoundary
@@ -622,6 +857,7 @@ class GeoKlikDecoder:
                 'adm2_name': None,
                 'geometry': geometry_json
             }
+
 
 def get_region_area(min_lat, max_lat, min_lon, max_lon):
     """Calculate approximate area in km2."""

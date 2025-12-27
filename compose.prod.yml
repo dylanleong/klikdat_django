@@ -8,6 +8,8 @@ services:
     volumes:
       - media_volume:/app/mediafiles
       - ./data:/app/data
+    ports:
+      - "1337:8000"
 
   db:
     restart: always

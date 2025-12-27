@@ -26,18 +26,26 @@ class ChatConsumer(AsyncWebsocketConsumer):
 
     # Receive message from WebSocket
     async def receive(self, text_data):
+        print(f"WebSocket Received: {text_data}")
         try:
             text_data_json = json.loads(text_data)
             message = text_data_json['message']
             sender_id = text_data_json.get('sender_id') # Or get from scope if authenticated
-        except json.JSONDecodeError:
+        except json.JSONDecodeError as e:
+            print(f"JSON Decode Error: {e}")
             return
-        except KeyError:
+        except KeyError as e:
+            print(f"Key Error: {e}")
             return
 
         # Save message to database
-        username = await self.save_message(self.room_id, sender_id, message)
+        try:
+            username = await self.save_message(self.room_id, sender_id, message)
+        except Exception as e:
+            print(f"Error saving message: {e}")
+            return
 
+        print(f"Broadcasting message from {username}: {message}")
         # Send message to room group
         await self.channel_layer.group_send(
             self.room_group_name,
@@ -51,6 +59,7 @@ class ChatConsumer(AsyncWebsocketConsumer):
 
     # Receive message from room group
     async def chat_message(self, event):
+        print(f"Group Received: {event}")
         message = event['message']
         sender_id = event['sender_id']
         username = event.get('username', 'Unknown')
@@ -64,19 +73,23 @@ class ChatConsumer(AsyncWebsocketConsumer):
 
     @database_sync_to_async
     def save_message(self, room_id, sender_id, message):
-        from users.models import Notification
-        room = ChatRoom.objects.get(id=room_id)
-        sender = User.objects.get(id=sender_id)
-        Message.objects.create(room=room, sender=sender, content=message)
-        
-        # Notify others
-        for participant in room.participants.all():
-            if participant.id != sender.id:
-                Notification.objects.create(
-                    user=participant,
-                    type='message',
-                    title=f'New message from {sender.username}',
-                    body=message[:50] + ('...' if len(message) > 50 else ''),
-                    data={'chat_room_id': room.id}
-                )
-        return sender.username
+        try:
+            from users.models import Notification
+            room = ChatRoom.objects.get(id=room_id)
+            sender = User.objects.get(id=sender_id)
+            Message.objects.create(room=room, sender=sender, content=message)
+            
+            # Notify others
+            for participant in room.participants.all():
+                if participant.id != sender.id:
+                    Notification.objects.create(
+                        user=participant,
+                        type='message',
+                        title=f'New message from {sender.username}',
+                        body=message[:50] + ('...' if len(message) > 50 else ''),
+                        data={'chat_room_id': room.id}
+                    )
+            return sender.username
+        except Exception as e:
+            print(f"Database Error in save_message: {e}")
+            raise e

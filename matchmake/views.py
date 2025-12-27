@@ -32,7 +32,7 @@ class MatchmakeProfileViewSet(viewsets.ModelViewSet):
     def perform_create(self, serializer):
         serializer.save(user=self.request.user)
 
-    @action(detail=False, methods=['get'], url_path='public/(?P<user_id>\d+)')
+    @action(detail=False, methods=['get'], url_path=r'public/(?P<user_id>\d+)')
     def public_profile(self, request, user_id=None):
         """Retrieve a specific user's public profile by their User ID."""
         profile = get_object_or_404(MatchmakeProfile, user_id=user_id)

@@ -28,12 +28,25 @@ class MatchmakeProfile(models.Model):
     
     RELATIONSHIP_GOAL_CHOICES = [
         ('Long-term', 'Long-term relationship'),
+        ('Short-term', 'Short-term relationship'),
         ('Casual', 'Casual dating'),
         ('Friendship', 'Friendship'),
         ('Not Sure', 'Not sure yet'),
     ]
     relationship_goal = models.CharField(max_length=50, choices=RELATIONSHIP_GOAL_CHOICES, blank=True, null=True)
     
+    # New detailed fields
+    height = models.IntegerField(null=True, blank=True, help_text='In centimeters')
+    ethnicity = models.CharField(max_length=100, blank=True, null=True)
+    languages_spoken = models.CharField(max_length=255, blank=True, null=True)
+    
+    # Long-term relationship advising info
+    pets = models.CharField(max_length=100, blank=True, null=True)
+    religion = models.CharField(max_length=100, blank=True, null=True)
+    politics = models.CharField(max_length=100, blank=True, null=True)
+    future_family_plans = models.CharField(max_length=255, blank=True, null=True)
+    zodiac = models.CharField(max_length=50, blank=True, null=True)
+
     interests = models.ManyToManyField(Interest, blank=True)
     
     # Preferences for Discovery
@@ -41,6 +54,19 @@ class MatchmakeProfile(models.Model):
     pref_max_age = models.IntegerField(default=99)
     pref_max_distance = models.IntegerField(default=50, help_text='In kilometers')
     pref_looking_for = models.CharField(max_length=20, default='Everyone') # 'M', 'F', 'O', 'Everyone'
+    
+    @property
+    def profile_completeness(self):
+        # Basic fields that should be filled
+        fields = [
+            self.bio, self.smoking, self.drinking, self.exercise, 
+            self.dietary_preferences, self.education, self.profession,
+            self.relationship_goal, self.height, self.ethnicity, 
+            self.languages_spoken, self.pets, self.religion, 
+            self.politics, self.future_family_plans, self.zodiac
+        ]
+        filled = sum(1 for f in fields if f)
+        return int((filled / len(fields)) * 100)
     
     def __str__(self):
         return f"{self.user.username}'s Matchmake Profile"

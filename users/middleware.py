@@ -7,8 +7,11 @@ class GeoIPVerificationMiddleware:
 
     def __call__(self, request):
         if request.user.is_authenticated:
-            # We only do this check for specific paths or if not already verified?
-            # To avoid overhead on every request, we could check if profile.v3_location is False
+            # Update last_active (Heartbeat)
+            if hasattr(request.user, 'profile'):
+                request.user.profile.update_last_active()
+
+            # GeoIP lookup
             try:
                 profile = VerificationProfile.objects.get(user=request.user)
                 if not profile.v3_location:

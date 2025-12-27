@@ -99,3 +99,12 @@ def update_user_ip_info(sender, user, request, **kwargs):
             profile.ip_address = ip
             # Country lookup is now handled by profile_pre_save
             profile.save()
+
+from allauth.account.signals import email_confirmed
+
+@receiver(email_confirmed)
+def update_user_email_verification(request, email_address, **kwargs):
+    user = email_address.user
+    if hasattr(user, 'verification_profile'):
+        user.verification_profile.v1_email = True
+        user.verification_profile.save()

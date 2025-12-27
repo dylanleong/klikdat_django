@@ -64,7 +64,19 @@ class ChatConsumer(AsyncWebsocketConsumer):
 
     @database_sync_to_async
     def save_message(self, room_id, sender_id, message):
+        from users.models import Notification
         room = ChatRoom.objects.get(id=room_id)
         sender = User.objects.get(id=sender_id)
         Message.objects.create(room=room, sender=sender, content=message)
+        
+        # Notify others
+        for participant in room.participants.all():
+            if participant.id != sender.id:
+                Notification.objects.create(
+                    user=participant,
+                    type='message',
+                    title=f'New message from {sender.username}',
+                    body=message[:50] + ('...' if len(message) > 50 else ''),
+                    data={'chat_room_id': room.id}
+                )
         return sender.username

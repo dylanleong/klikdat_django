@@ -2,8 +2,8 @@ from django.contrib.auth.models import User
 from rest_framework import viewsets, permissions, status
 from rest_framework.decorators import action
 from rest_framework.response import Response
-from .serializers import UserSerializer, VerificationProfileSerializer
-from .models import VerificationProfile
+from .serializers import UserSerializer, VerificationProfileSerializer, NotificationSerializer
+from .models import VerificationProfile, Notification
 import random
 import string
 from django_q.tasks import async_task
@@ -81,8 +81,8 @@ class VerificationViewSet(viewsets.GenericViewSet):
             lat = request.data.get('latitude')
             lng = request.data.get('longitude')
             if lat and lng:
-                profile.user.profile.latitude = lat
-                profile.user.profile.longitude = lng
+                profile.user.profile.latitude = round(float(lat), 6)
+                profile.user.profile.longitude = round(float(lng), 6)
                 profile.user.profile.save() # This triggers the save_location_history signal
             
             profile.v3_location = True
@@ -124,3 +124,49 @@ class VerificationViewSet(viewsets.GenericViewSet):
         profile.ai_analysis_status = 'pending'
         profile.save()
         return Response({'message': 'Verification status reset'})
+
+    @action(detail=False, methods=['post'])
+    def resend_email(self, request):
+        """Resend verification email for V1"""
+        from allauth.account.models import EmailAddress
+        from allauth.account.utils import send_email_confirmation
+        
+        user = request.user
+        if not user.email:
+            return Response({'error': 'User has no email address'}, status=status.HTTP_400_BAD_REQUEST)
+            
+        # Check if already verified
+        try:
+            email_obj = EmailAddress.objects.get(user=user, email=user.email)
+            if email_obj.verified:
+                # Ensure profile is synced
+                if hasattr(user, 'verification_profile') and not user.verification_profile.v1_email:
+                    user.verification_profile.v1_email = True
+                    user.verification_profile.save()
+                return Response({'message': 'Email is already verified'})
+        except EmailAddress.DoesNotExist:
+            # Should exist if created via RegisterView, but handle just in case
+            pass
+
+        # Send confirmation
+        send_email_confirmation(request, user)
+        return Response({'message': 'Verification email sent. Check your console logs.'})
+
+class NotificationViewSet(viewsets.ModelViewSet):
+    serializer_class = NotificationSerializer
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get_queryset(self):
+        return Notification.objects.filter(user=self.request.user)
+
+    @action(detail=False, methods=['post'])
+    def mark_all_read(self, request):
+        self.get_queryset().update(is_read=True)
+        return Response({'status': 'ok'})
+    
+    @action(detail=True, methods=['post'])
+    def mark_read(self, request, pk=None):
+        notif = self.get_object()
+        notif.is_read = True
+        notif.save()
+        return Response({'status': 'ok'})

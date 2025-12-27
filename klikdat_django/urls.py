@@ -38,6 +38,7 @@ urlpatterns = [
     path('api/properties/', include('properties.urls')),
     path('api/recruitment/', include('recruitment.urls')),
     path('api/geo/', include('geo.urls')),
+    path('api/safety/', include('safety.urls')),
     path('accounts/', include('allauth.urls')),
 ]
 

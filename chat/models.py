@@ -5,6 +5,15 @@ class ChatRoom(models.Model):
     name = models.CharField(max_length=255, blank=True, null=True)
     creator = models.ForeignKey(User, on_delete=models.CASCADE, related_name='created_rooms', null=True)
     participants = models.ManyToManyField(User, related_name='chat_rooms')
+    
+    MODULE_CHOICES = [
+        ('matchmake', 'Matchmake'),
+        ('vehicle', 'Vehicle'),
+        ('recruitment', 'Recruitment'),
+        ('property', 'Property'),
+    ]
+    module = models.CharField(max_length=20, choices=MODULE_CHOICES, null=True, blank=True)
+    
     created_at = models.DateTimeField(auto_now_add=True)
 
     def __str__(self):

@@ -184,6 +184,18 @@ class GeoKlikService:
                 
                 id_str = f"{gk_region.iso_a2}-{gk_region.adm1_code}-{geodata}"
                 
+                # High-Precision (5mx5m)
+                cell_x, cell_y = HilbertCoder.d2xy(n_val, d_val)
+                y_low, y_high = CoordinateTransformer.denormalize_to_bbox(cell_y, gk_region.min_lat, gk_region.max_lat, 131071)
+                x_low, x_high = CoordinateTransformer.denormalize_to_bbox(cell_x, gk_region.min_lon, gk_region.max_lon, 131071)
+                y_mid = (y_low + y_high) / 2
+                x_mid = (x_low + x_high) / 2
+                if lat >= y_mid:
+                    quad = "A" if lon < x_mid else "B"
+                else:
+                    quad = "C" if lon < x_mid else "D"
+                precise_id = f"{id_str}.{quad}"
+
                 ocean_names = {
                     "PE": "Pacific Ocean (East)",
                     "PW": "Pacific Ocean (West)",
@@ -199,6 +211,7 @@ class GeoKlikService:
 
                 return {
                     "geoklik_id": id_str,
+                    "precise_id": precise_id,
                     "country_name": "International Waters", 
                     "region_name": ocean_names.get(gk_region.adm1_code, "Ocean"),
                     "adm2_name": "Ocean"
@@ -258,8 +271,31 @@ class GeoKlikService:
 
         id_str = f"{gk_region.iso_a2}-{region_code}-{geodata}"
 
+        # 6. High-Precision (5mx5m) Quadrant
+        # Determine sub-quadrant within the 10mx10m cell
+        # x_min, x_max, y_min, y_max are the boundaries of the 10mx10m cell
+        n_full = 1 << (17 if gk_region.is_giant else 16)
+        max_code = 131071 if gk_region.is_giant else 65535
+        
+        # Get the cell's center from the integer coordinates (d_val -> x_int, y_int)
+        cell_x, cell_y = HilbertCoder.d2xy(n_full, d_val)
+        y_low, y_high = CoordinateTransformer.denormalize_to_bbox(cell_y, gk_region.min_lat, gk_region.max_lat, max_code)
+        x_low, x_high = CoordinateTransformer.denormalize_to_bbox(cell_x, gk_region.min_lon, gk_region.max_lon, max_code)
+        
+        y_mid = (y_low + y_high) / 2
+        x_mid = (x_low + x_high) / 2
+        
+        # Mapping: A (NW), B (NE), C (SW), D (SE)
+        if lat >= y_mid:
+            quad = "A" if lon < x_mid else "B"
+        else:
+            quad = "C" if lon < x_mid else "D"
+            
+        precise_id = f"{id_str}.{quad}"
+
         return {
             "geoklik_id": id_str,
+            "precise_id": precise_id,
             "country_name": country_name,
             "region_name": wb_boundary.adm1_name,
             "adm2_name": adm2_name
@@ -269,6 +305,12 @@ class GeoKlikService:
     def decode(cls, geoklik_id, epoch_name="2025.1"):
         from geo.models import GeoKlikRegion, WorldBankRegionMapping
         
+        # Handle 5mx5m quadrant suffix
+        quad = None
+        if '.' in geoklik_id:
+            geoklik_id, quad = geoklik_id.split('.', 1)
+            quad = quad.upper()
+
         parts = geoklik_id.split('-')
         if len(parts) < 3: return None
         
@@ -304,6 +346,22 @@ class GeoKlikService:
             center_lat = (y_min + y_max)/2
             center_lon = (x_min + x_max)/2
             
+            # Apply Quadrant
+            if quad:
+                mid_y = (y_min + y_max) / 2
+                mid_x = (x_min + x_max) / 2
+                if quad == 'A': # NW
+                    y_min, x_max = mid_y, mid_x
+                elif quad == 'B': # NE
+                    y_min, x_min = mid_y, mid_x
+                elif quad == 'C': # SW
+                    y_max, x_max = mid_y, mid_x
+                elif quad == 'D': # SE
+                    y_max, x_min = mid_y, mid_x
+                
+                center_lat = (y_min + y_max) / 2
+                center_lon = (x_min + x_max) / 2
+
             # Since regions might overlap (East/West Pacific), we assume the code (PE vs PW) is sufficient.
             
             return {
@@ -366,6 +424,22 @@ class GeoKlikService:
         center_lat = (y_min + y_max)/2
         center_lon = (x_min + x_max)/2
         
+        # 5. Apply Quadrant (5mx5m) if present
+        if quad:
+            mid_y = (y_min + y_max) / 2
+            mid_x = (x_min + x_max) / 2
+            if quad == 'A': # NW
+                y_min, x_max = mid_y, mid_x
+            elif quad == 'B': # NE
+                y_min, x_min = mid_y, mid_x
+            elif quad == 'C': # SW
+                y_max, x_max = mid_y, mid_x
+            elif quad == 'D': # SE
+                y_max, x_min = mid_y, mid_x
+            
+            center_lat = (y_min + y_max) / 2
+            center_lon = (x_min + x_max) / 2
+
         # Metadata Lookup
         from geo.models import CountryInfo, WorldBankBoundary
         from django.contrib.gis.geos import Point
@@ -478,8 +552,35 @@ class GeoKlikService:
         
         # Determine current depth and next chars
         depth = len(geodata_prefix)
-        if depth >= 8: return [] # Already at full resolution
         
+        # Level 3: 5mx5m Quadrants (.A, .B, .C, .D)
+        # If we have a full 10m ID (at least 8 chars of geodata), show quadrants.
+        if depth >= 8:
+            # We use the full ID bbox (which we already know from decode logic)
+            res = cls.decode(clean_id, epoch_name)
+            if not res: return []
+            
+            y_min, x_min, y_max, x_max = res['bbox']
+            mid_y = (y_min + y_max) / 2
+            mid_x = (x_min + x_max) / 2
+            
+            # NW, NE, SW, SE
+            quads = [
+                ('.A', 'A', [mid_y, x_min, y_max, mid_x]),
+                ('.B', 'B', [mid_y, mid_x, y_max, x_max]),
+                ('.C', 'C', [y_min, x_min, mid_y, mid_x]),
+                ('.D', 'D', [y_min, mid_x, mid_y, x_max]),
+            ]
+            
+            data = []
+            for suffix, label, bbox in quads:
+                data.append({
+                    'id': f"{clean_id}{suffix}",
+                    'label': label,
+                    'bbox': bbox
+                })
+            return data
+
         # Segment 3 hierarchy: chars 0-3
         # Segment 4 hierarchy: chars 4-7
         current_segment = geodata_prefix[:4] if depth < 4 else geodata_prefix[4:]
@@ -545,7 +646,10 @@ class GeoKlikService:
                 lt_min, _ = CoordinateTransformer.denormalize_to_bbox(y1, gk_region.min_lat, gk_region.max_lat, max_code)
                 _, lt_max = CoordinateTransformer.denormalize_to_bbox(y2, gk_region.min_lat, gk_region.max_lat, max_code)
 
-                full_id = f"{iso_a2}-{region_code}-{geodata_prefix[:4]}-{test_suffix}"
+                geodata_parts = [geodata_prefix[:4], test_suffix]
+                formatted_geodata = "-".join(geodata_parts)
+                full_id = f"{iso_a2}-{region_code}-{formatted_geodata}"
+                
                 data.append({
                     'id': full_id,
                     'label': test_suffix,
